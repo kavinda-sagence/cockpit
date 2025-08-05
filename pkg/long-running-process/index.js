@@ -6,7 +6,7 @@ import { LongRunningProcess, ProcessState } from './long-running-process.js';
 let state, command, run_button, output;
 
 // default shell command for the long-running process to run
-const default_command = "date; for i in `seq 30`; do echo $i; sleep 1; done";
+const default_command = "";
 
 // follow live output of the given unit, put into "output" <pre> area
 function showJournal(unitName, filter_arg) {
@@ -77,10 +77,15 @@ cockpit.transport.wait(() => {
         else if (process.state === ProcessState.FAILED)
             process.reset();
         else
-            process.run(["/bin/sh", "-ec", command.value])
-                    .catch(ex => {
-                        state.textContent = "Error: " + ex.toString();
-                        run_button.setAttribute("disabled", "");
-                    });
+            // Use stdbuf to force line buffering for both stdout and stderr to ensure output appears immediately
+            if("" != command.value) {
+                process.run(["stdbuf", "-oL", "-eL", command.value])
+                        .catch(ex => {
+                            state.textContent = "Error: " + ex.toString();
+                            run_button.setAttribute("disabled", "");
+                        });
+            } else {
+                state.textContent = "Error: Command cannot be empty";
+            }
     });
 });

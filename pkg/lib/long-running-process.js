@@ -75,7 +75,8 @@ export class LongRunningProcess {
             throw new Error(`cannot start LongRunningProcess in state ${this.state}`);
 
         // no need to directly react to this -- JobNew and _checkState() will pick up when the unit runs
-        return cockpit.spawn(["systemd-run", "--unit", this.serviceName, "--service-type=oneshot", "--no-block", "--"].concat(argv),
+        // Use SIGINT (Ctrl+C) instead of SIGTERM when stopping the service
+        return cockpit.spawn(["systemd-run", "--unit", this.serviceName, "--service-type=oneshot", "--no-block", "--property=KillSignal=SIGINT", "--"].concat(argv),
                              { superuser: "require", err: "message", ...options });
     }
 
@@ -84,7 +85,7 @@ export class LongRunningProcess {
         if (this.state !== ProcessState.RUNNING && this.state !== ProcessState.FAILED)
             throw new Error(`cannot terminate LongRunningProcess in state ${this.state}`);
 
-        /* This sends a SIGTERM to the unit, causing it to go into "failed" state. This would not
+        /* This sends a SIGINT (Ctrl+C) to the unit, causing it to go into "failed" state. This would not
          * happen with `systemd-run -p SuccessExitStatus=0`, but that does not yet work on older
          * OSes with systemd ≤ 241 So let checkState() know that a failure is due to termination. */
         this.terminated = true;
