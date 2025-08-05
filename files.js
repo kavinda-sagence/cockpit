@@ -43,6 +43,8 @@ const info = {
         "users/users.js",
 
         "pinger/pinger.js",
+        
+        "hawkeye/hawkeye.js",
     ],
 
     tests: [
@@ -150,6 +152,9 @@ const info = {
 
         "pinger/ping.html",
         "pinger/ping.css",
+
+        "hawkeye/hawkeye.html",
+        "hawkeye/hawkeye.css",
     ]
 };
 
