@@ -41,6 +41,8 @@ const info = {
 
         "packagekit/updates.jsx",
         "users/users.js",
+
+        "pinger/pinger.js",
     ],
 
     tests: [
@@ -145,6 +147,9 @@ const info = {
         "systemd/hwinfo.html",
 
         "users/index.html",
+
+        "pinger/ping.html",
+        "pinger/ping.css",
     ]
 };
 
