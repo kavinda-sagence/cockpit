@@ -42,6 +42,9 @@ const info = {
         "packagekit/updates.jsx",
         "users/users.js",
 
+        "long-running-process/index.js",
+        "long-running-process/long-running-process.js",
+
         "pinger/pinger.js",
         
         "hawkeye/hawkeye.js",
@@ -149,6 +152,9 @@ const info = {
         "systemd/hwinfo.html",
 
         "users/index.html",
+
+        "long-running-process/index.html",
+        "long-running-process/long-running.css",
 
         "pinger/ping.html",
         "pinger/ping.css",

@@ -1,17 +1,17 @@
-const address = document.getElementById("address");
+const address = "127.0.0.0"
 const output = document.getElementById("output");
 const result = document.getElementById("result");
-const button = document.getElementById("ping");
+const button = document.getElementById("start");
 const stopButton = document.getElementById("stop");
 
-let pingProcess = null;
+let hostProcess = null;
 
-function ping_run() {
+function host_run() {
     /* global cockpit */
-    pingProcess = cockpit.spawn(["ping", address.value]);
-    pingProcess.stream(ping_output)
-            .then(ping_success)
-            .catch(ping_fail);
+    hostProcess = cockpit.spawn(["ping", address]);
+    hostProcess.stream(host_output)
+            .then(host_success)
+            .catch(host_fail);
 
     result.textContent = "";
     output.textContent = "";
@@ -21,49 +21,49 @@ function ping_run() {
     stopButton.disabled = false;
 }
 
-function ping_success() {
+function host_success() {
     result.style.color = "green";
     result.textContent = "success";
     
     // Reset button states
     button.disabled = false;
     stopButton.disabled = true;
-    pingProcess = null;
+    hostProcess = null;
 }
 
-function ping_fail() {
+function host_fail() {
     result.style.color = "red";
     result.textContent = "fail";
     
     // Reset button states
     button.disabled = false;
     stopButton.disabled = true;
-    pingProcess = null;
+    hostProcess = null;
 }
 
-function ping_output(data) {
+function host_output(data) {
     output.append(document.createTextNode(data));
 }
 
-function ping_stop() {
+function host_stop() {
 
-    if (pingProcess) {
-        pingProcess.close();
+    if (hostProcess) {
+        hostProcess.close();
         result.style.color = "orange";
         result.textContent = "stopped";
         
         // Reset button states
         button.disabled = false;
         stopButton.disabled = true;
-        pingProcess = null;
+        hostProcess = null;
     }
 }
 
-// Connect the button to starting the "ping" process
-button.addEventListener("click", ping_run);
+// Connect the button to starting the "host" process
+button.addEventListener("click", host_run);
 
-// Connect the stop button to stopping the "ping" process
-stopButton.addEventListener("click", ping_stop);
+// Connect the stop button to stopping the "host" process
+stopButton.addEventListener("click", host_stop);
 
 // Send a 'init' message.  This tells integration tests that we are ready to go
 cockpit.transport.wait(function() { });
