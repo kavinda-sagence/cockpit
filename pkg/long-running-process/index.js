@@ -3,7 +3,7 @@
 import { LongRunningProcess, ProcessState } from './long-running-process.js';
 
 // DOM objects
-let state, command, run_button, output;
+let state, command, run_button, output, clear_button;
 
 // default shell command for the long-running process to run
 const default_command = "";
@@ -56,6 +56,11 @@ cockpit.transport.wait(() => {
     command = document.getElementById("command");
     run_button = document.getElementById("run");
     output = document.getElementById("output");
+    clear_button = document.getElementById("clear");
+
+    clear_button.addEventListener("click", () => {
+        output.textContent = "";
+    });
 
     command.value = default_command;
 
