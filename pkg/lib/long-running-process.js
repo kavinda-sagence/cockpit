@@ -138,7 +138,7 @@ export class LongRunningProcess {
             clearInterval(this.periodicCheck);
         }
         
-        // Check every 2 seconds as a fallback for missed D-Bus events
+        // Check every second as a fallback for missed D-Bus events
         this.periodicCheck = setInterval(() => {
             // console.log("Periodic state check");
             this._checkState();
