@@ -3,7 +3,7 @@
 
     "tools": {
         "index": {
-            "label": "Long-running Process",
+            "label": "AI-Host",
             "path": "index.html"
         }
     }

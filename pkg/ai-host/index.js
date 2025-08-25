@@ -6,7 +6,7 @@ import { LongRunningProcess, ProcessState } from './long-running-process.js';
 let state, command, run_button, output, clear_button;
 
 // default shell command for the long-running process to run
-const default_command = "/home/kavinda/Desktop/MySpace/code/example/run.sh";
+const default_command = "/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/runtime/ai_host/run.sh";
 
 // follow live output of the given unit, put into "output" <pre> area
 function showJournal(unitName, filter_arg) {
