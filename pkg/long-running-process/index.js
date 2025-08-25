@@ -6,7 +6,7 @@ import { LongRunningProcess, ProcessState } from './long-running-process.js';
 let state, command, run_button, output, clear_button;
 
 // default shell command for the long-running process to run
-const default_command = "date; for i in `seq 10`; do echo $i; sleep 1; done";
+const default_command = "echo \"User: $(whoami), WD: $(pwd), Starting at: $(date)\"; for i in $(seq 10); do echo \"$i\"; sleep 1; done; echo \"Finished at: $(date)\"";
 
 // follow live output of the given unit, put into "output" <pre> area
 function showJournal(unitName, filter_arg) {
