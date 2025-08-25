@@ -142,7 +142,7 @@ export class LongRunningProcess {
         this.periodicCheck = setInterval(() => {
             // console.log("Periodic state check");
             this._checkState();
-        }, 2000);
+        }, 1000);
     }
     
     // Stop periodic state checking  
