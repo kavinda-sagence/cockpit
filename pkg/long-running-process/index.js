@@ -6,7 +6,7 @@ import { LongRunningProcess, ProcessState } from './long-running-process.js';
 let state, command, run_button, output, clear_button;
 
 // default shell command for the long-running process to run
-const default_command = "";
+const default_command = "date; for i in `seq 30`; do echo $i; sleep 1; done";
 
 // follow live output of the given unit, put into "output" <pre> area
 function showJournal(unitName, filter_arg) {
@@ -17,13 +17,14 @@ function showJournal(unitName, filter_arg) {
     // reset previous output
     output.textContent = "";
 
-    const argv = ["journalctl", "--output=cat", "--unit", unitName, "--follow", "--lines=all", filter_arg];
-    showJournal.journalctl = cockpit.spawn(argv, { superuser: "require", err: "message" })
+    const argv = ["journalctl", "--user", "--output=cat", "--unit", unitName, "--follow", "--lines=all", filter_arg];
+    showJournal.journalctl = cockpit.spawn(argv, { err: "message" })
             .stream(data => output.append(document.createTextNode(data)))
             .catch(ex => { output.textContent = JSON.stringify(ex) });
 }
 
 function update(process) {
+    // console.log("Update called with state:", process.state);
     state.textContent = cockpit.format("$0 $1", process.serviceName, process.state);
 
     switch (process.state) {
@@ -74,7 +75,7 @@ cockpit.transport.wait(() => {
     const process = new LongRunningProcess(serviceName, update);
 
     /* Start process on clicking the "Start" button
-     * This runs as root, thus will be shared with all privileged Cockpit sessions.
+     * This runs as user, in the user's systemd session.
      */
     run_button.addEventListener("click", () => {
         if (process.state === ProcessState.RUNNING)
@@ -84,7 +85,7 @@ cockpit.transport.wait(() => {
         else
             // Use stdbuf to force line buffering for both stdout and stderr to ensure output appears immediately
             if("" != command.value) {
-                process.run(["stdbuf", "-oL", "-eL", command.value])
+                process.run(["/bin/sh", "-ec", command.value])
                         .catch(ex => {
                             state.textContent = "Error: " + ex.toString();
                             run_button.setAttribute("disabled", "");
