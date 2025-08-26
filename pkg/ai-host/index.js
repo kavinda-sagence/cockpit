@@ -3,10 +3,12 @@
 import { LongRunningProcess, ProcessState } from './long-running-process.js';
 
 // DOM objects
-let state, command, run_button, output, clear_button;
+let state, command, run_button, output, clear_button, dropdown, fw_path;
 
 // default shell command for the long-running process to run
 const default_command = "/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/runtime/ai_host/run.sh";
+const default_fw_path = "/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/test_data/no_op/";
+const default_num_streams = 1;
 
 // follow live output of the given unit, put into "output" <pre> area
 function showJournal(unitName, filter_arg) {
@@ -58,12 +60,24 @@ cockpit.transport.wait(() => {
     run_button = document.getElementById("run");
     output = document.getElementById("output");
     clear_button = document.getElementById("clear");
+    dropdown = document.getElementById('num_streams');
+    fw_path = document.getElementById('fw_path');
+
+    dropdown.innerHTML = '';
+    for (let i = 1; i <= 255; i++) {
+        const option = document.createElement('option');
+        option.value = i;
+        option.text = i;
+        if (i === default_num_streams) option.selected = true;
+        dropdown.appendChild(option);
+    }
 
     clear_button.addEventListener("click", () => {
         output.textContent = "";
     });
 
     command.value = default_command;
+    fw_path.value = default_fw_path;
 
     /* Build a service name which contains exactly the identifying properties for the
      * command to re-attach to. For a single static command this is just the page name,
@@ -89,7 +103,7 @@ cockpit.transport.wait(() => {
             output.textContent = "";
 
             if("" != command.value) {
-                process.run(["/bin/stdbuf", "-oL", "-eL", "/bin/bash", command.value])
+                process.run(["/bin/stdbuf", "-oL", "-eL", "/bin/bash", command.value, fw_path.value, dropdown.value])
                         .catch(ex => {
                             state.textContent = "Error: " + ex.toString();
                             run_button.setAttribute("disabled", "");
