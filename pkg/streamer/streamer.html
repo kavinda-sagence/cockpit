@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Pinger</title>
+    <title>Streamer</title>
     <meta charset="utf-8">
+    <link href="streamer.css" type="text/css" rel="stylesheet">
     <script src="../base1/cockpit.js"></script>
 </head>
 <body>
@@ -10,11 +11,10 @@
         <section>
             <div>
                 <div>
-                    <label for="address">Address</label>
-                    <input id="address" value="127.0.0.0">
+                    <input id="command" type="text"/>
                 </div>
                 <div>
-                    <button id="ping">Ping</button>
+                    <button id="start">Start</button>
                     <button id="stop" disabled>Stop</button>
                     <span id="result"></span>
                 </div>
@@ -25,6 +25,6 @@
         </section>
     </main>
 
-    <script src="pinger.js"></script>
+    <script src="streamer.js"></script>
 </body>
 </html>

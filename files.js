@@ -45,9 +45,7 @@ const info = {
         "ai-host/index.js",
         "ai-host/long-running-process.js",
 
-        "pinger/pinger.js",
-        
-        "hawkeye/hawkeye.js",
+        "streamer/streamer.js",
     ],
 
     tests: [
@@ -156,11 +154,8 @@ const info = {
         "ai-host/index.html",
         "ai-host/long-running.css",
 
-        "pinger/ping.html",
-        "pinger/ping.css",
-
-        "hawkeye/hawkeye.html",
-        "hawkeye/hawkeye.css",
+        "streamer/streamer.html",
+        "streamer/streamer.css",
     ]
 };
 

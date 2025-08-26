@@ -83,6 +83,8 @@ cockpit.transport.wait(() => {
         else if (process.state === ProcessState.FAILED)
             process.reset();
         else
+            output.textContent = "";
+
             if("" != command.value) {
                 process.run(["/bin/stdbuf", "-oL", "-eL", "/bin/bash", command.value])
                         .catch(ex => {

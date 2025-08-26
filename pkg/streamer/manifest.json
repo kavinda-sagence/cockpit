@@ -3,8 +3,8 @@
 
     "tools": {
         "pinger": {
-            "label": "Pinger",
-            "path": "ping.html"
+            "label": "Streamer",
+            "path": "streamer.html"
         }
     }
 }
