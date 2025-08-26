@@ -78,11 +78,14 @@ cockpit.transport.wait(() => {
      * This runs as user, in the user's systemd session.
      */
     run_button.addEventListener("click", () => {
-        if (process.state === ProcessState.RUNNING)
+
+        if (process.state === ProcessState.RUNNING) {
             process.terminate();
-        else if (process.state === ProcessState.FAILED)
+        }
+        else if (process.state === ProcessState.FAILED) {
             process.reset();
-        else
+        }
+        else {
             output.textContent = "";
 
             if("" != command.value) {
@@ -94,5 +97,8 @@ cockpit.transport.wait(() => {
             } else {
                 state.textContent = "Error: Command cannot be empty";
             }
+        }
+
     });
+
 });
