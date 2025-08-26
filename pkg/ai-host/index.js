@@ -69,7 +69,7 @@ cockpit.transport.wait(() => {
      * command to re-attach to. For a single static command this is just the page name,
      * but it could also include the command name or path, arguments, or a playbook name,
      * etc.  if the page is dealing with multiple commands. */
-    const serviceName = "cockpit-longrunning.service";
+    const serviceName = "cockpit-ai-host.service";
 
     // Set up process manager; update() is called whenever the running state changes
     const process = new LongRunningProcess(serviceName, update);
