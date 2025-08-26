@@ -3,7 +3,13 @@
 import { LongRunningProcess, ProcessState } from './long-running-process.js';
 
 // DOM objects
-let state, command, run_button, output, clear_button, dropdown, fw_path;
+const state = document.getElementById("state");
+const command = document.getElementById("command");
+const runButton = document.getElementById("run");
+const output = document.getElementById("output");
+const clearButton = document.getElementById("clear");
+const numStreams = document.getElementById('num_streams');
+const fwPath = document.getElementById('fw_path');
 
 // default shell command for the long-running process to run
 const default_command = "/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/runtime/ai_host/run.sh";
@@ -33,18 +39,18 @@ function update(process) {
     case ProcessState.INIT:
         break;
     case ProcessState.STOPPED:
-        run_button.removeAttribute("disabled");
-        run_button.textContent = "Start";
+        runButton.removeAttribute("disabled");
+        runButton.textContent = "Start";
         break;
     case ProcessState.RUNNING:
-        run_button.removeAttribute("disabled");
-        run_button.textContent = "Terminate";
+        runButton.removeAttribute("disabled");
+        runButton.textContent = "Terminate";
         // StateChangeTimestamp property is in µs since epoch, but journalctl expects seconds
         showJournal(process.serviceName, "--since=@" + Math.floor(process.startTimestamp / 1000000));
         break;
     case ProcessState.FAILED:
-        run_button.removeAttribute("disabled");
-        run_button.textContent = "Reset";
+        runButton.removeAttribute("disabled");
+        runButton.textContent = "Reset";
         // Show the whole journal of this boot
         showJournal(process.serviceName, "--boot");
         break;
@@ -55,29 +61,22 @@ function update(process) {
 
 // called once after page initializes; set up the page
 cockpit.transport.wait(() => {
-    state = document.getElementById("state");
-    command = document.getElementById("command");
-    run_button = document.getElementById("run");
-    output = document.getElementById("output");
-    clear_button = document.getElementById("clear");
-    dropdown = document.getElementById('num_streams');
-    fw_path = document.getElementById('fw_path');
 
-    dropdown.innerHTML = '';
-    for (let i = 1; i <= 255; i++) {
+    numStreams.innerHTML = '';
+    for (let i = 1; i <= 256; i++) {
         const option = document.createElement('option');
         option.value = i;
         option.text = i;
         if (i === default_num_streams) option.selected = true;
-        dropdown.appendChild(option);
+        numStreams.appendChild(option);
     }
 
-    clear_button.addEventListener("click", () => {
+    clearButton.addEventListener("click", () => {
         output.textContent = "";
     });
 
     command.value = default_command;
-    fw_path.value = default_fw_path;
+    fwPath.value = default_fw_path;
 
     /* Build a service name which contains exactly the identifying properties for the
      * command to re-attach to. For a single static command this is just the page name,
@@ -91,7 +90,7 @@ cockpit.transport.wait(() => {
     /* Start process on clicking the "Start" button
      * This runs as user, in the user's systemd session.
      */
-    run_button.addEventListener("click", () => {
+    runButton.addEventListener("click", () => {
 
         if (process.state === ProcessState.RUNNING) {
             process.terminate();
@@ -102,15 +101,23 @@ cockpit.transport.wait(() => {
         else {
             output.textContent = "";
 
-            if("" != command.value) {
-                process.run(["/bin/stdbuf", "-oL", "-eL", "/bin/bash", command.value, fw_path.value, dropdown.value])
-                        .catch(ex => {
-                            state.textContent = "Error: " + ex.toString();
-                            run_button.setAttribute("disabled", "");
-                        });
-            } else {
-                state.textContent = "Error: Command cannot be empty";
+            if("" === fwPath.value) {
+                state.textContent = "Error: Firmware Path cannot be empty";
+                fwPath.focus();
+                return;
             }
+
+            if("" === command.value) {
+                state.textContent = "Error: Command cannot be empty";
+                command.focus();
+                return;
+            }
+            
+            process.run(["/bin/stdbuf", "-oL", "-eL", "/bin/bash", command.value, fwPath.value, numStreams.value])
+                    .catch(ex => {
+                        state.textContent = "Error: " + ex.toString();
+                        runButton.setAttribute("disabled", "");
+                    });
         }
 
     });
