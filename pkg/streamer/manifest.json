@@ -4,7 +4,7 @@
     "tools": {
         "pinger": {
             "label": "Streamer",
-            "path": "streamer.html"
+            "path": "index.html"
         }
     }
 }

@@ -45,7 +45,7 @@ const info = {
         "ai-host/index.js",
         "ai-host/long-running-process.js",
 
-        "streamer/streamer.js",
+        "streamer/index.js",
     ],
 
     tests: [
@@ -152,10 +152,10 @@ const info = {
         "users/index.html",
 
         "ai-host/index.html",
-        "ai-host/long-running.css",
+        "ai-host/index.css",
 
-        "streamer/streamer.html",
-        "streamer/streamer.css",
+        "streamer/index.html",
+        "streamer/index.css",
     ]
 };
 
