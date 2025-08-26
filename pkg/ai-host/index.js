@@ -84,7 +84,7 @@ cockpit.transport.wait(() => {
             process.reset();
         else
             if("" != command.value) {
-                process.run(["stdbuf", "-oL", "-eL", command.value])
+                process.run(["/bin/stdbuf", "-oL", "-eL", "/bin/bash", command.value])
                         .catch(ex => {
                             state.textContent = "Error: " + ex.toString();
                             run_button.setAttribute("disabled", "");
