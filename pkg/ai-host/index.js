@@ -40,21 +40,21 @@ function update(process) {
     case ProcessState.INIT:
         break;
     case ProcessState.BUSY:
-        runButton.setAttribute("disabled", "");
+        runButton.disabled = true;
         runButton.textContent = "Working...";
         break;
     case ProcessState.STOPPED:
-        runButton.removeAttribute("disabled");
+        runButton.disabled = false;
         runButton.textContent = "Start";
         break;
     case ProcessState.RUNNING:
-        runButton.removeAttribute("disabled");
+        runButton.disabled = false;
         runButton.textContent = "Terminate";
         // StateChangeTimestamp property is in µs since epoch, but journalctl expects seconds
         showJournal(process.serviceName, "--since=@" + Math.floor(process.startTimestamp / 1000000));
         break;
     case ProcessState.FAILED:
-        runButton.removeAttribute("disabled");
+        runButton.disabled = false;
         runButton.textContent = "Reset";
         // Show the whole journal of this boot
         showJournal(process.serviceName, "--boot");
@@ -64,18 +64,7 @@ function update(process) {
     }
 }
 
-// called once after page initializes; set up the page
-cockpit.transport.wait(() => {
-
-    let userName = "";
-    let userHomeDir = "";
-    cockpit.user().then(user => {
-        userHomeDir = user.home;
-        userName = user.name;
-    }).catch(() => {
-        runButton.setAttribute("disabled", "");
-        state.textContent = "Error: Unable to determine user name and user home directory";
-    });
+function init(userName, userHomeDir) {
 
     numStreams.innerHTML = '';
     for (let i = 1; i <= 256; i++) {
@@ -131,9 +120,32 @@ cockpit.transport.wait(() => {
             process.run(["/bin/stdbuf", "-oL", "-eL", "/bin/bash", command.value, userName, userHomeDir, fwPath.value, numStreams.value])
                     .catch(ex => {
                         state.textContent = "Error: " + ex.toString();
-                        runButton.setAttribute("disabled", "");
+                        runButton.disabled = true;
                     });
         }
+
+    });
+}
+
+// called once after page initializes; set up the page
+cockpit.transport.wait(() => {
+
+    // check admin previleges
+    const permission = cockpit.permission({ admin: true });
+
+    permission.addEventListener("changed", () => {
+
+        if(!permission.allowed) {
+            runButton.disabled = true;
+            state.textContent = "Error: You need administrator privileges to run this command.";
+            return;
+        }
+
+        const userName = permission.user.name;
+        const userHomeDir = permission.user.home;
+
+        init(userName, userHomeDir);
+        init_called = true;
 
     });
 
