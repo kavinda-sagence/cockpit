@@ -1,6 +1,6 @@
 /* global cockpit */
 
-import { LongRunningProcess, ProcessState } from './long-running-process.js';
+import { LongRunningProcess, ProcessState } from './long-running-process-usr.js';
 
 // DOM objects
 const state = document.getElementById("state");

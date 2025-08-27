@@ -43,7 +43,7 @@ const info = {
         "users/users.js",
 
         "ai-host/index.js",
-        "ai-host/long-running-process.js",
+        "ai-host/long-running-process-usr.js",
 
         "streamer/index.js",
     ],
