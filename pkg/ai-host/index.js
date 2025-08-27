@@ -33,10 +33,14 @@ function showJournal(unitName, filter_arg) {
 
 function update(process) {
     // console.log("Update called with state:", process.state);
-    state.textContent = cockpit.format("$0 $1", process.serviceName, process.state);
+    state.textContent = cockpit.format("$0 : $1", process.serviceName, process.serviceStateStr);
 
     switch (process.state) {
     case ProcessState.INIT:
+        break;
+    case ProcessState.BUSY:
+        runButton.setAttribute("disabled", "");
+        runButton.textContent = "Working...";
         break;
     case ProcessState.STOPPED:
         runButton.removeAttribute("disabled");

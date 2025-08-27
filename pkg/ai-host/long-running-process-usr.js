@@ -39,6 +39,7 @@ export const ProcessState = {
     STOPPED: 'stopped',
     RUNNING: 'running',
     FAILED: 'failed',
+    BUSY: 'busy'
 };
 
 export class LongRunningProcess {
@@ -56,6 +57,7 @@ export class LongRunningProcess {
         this.subscription = null;
         this.jobSubscription = null;
         this.periodicCheck = null;
+        this.serviceStateStr = "N/A";
 
         // Watch for start event of the service
         this.jobSubscription = this.systemdClient.subscribe({ interface: I_SD_MGR, member: "JobNew" }, (path, iface, signal, args) => {
@@ -85,7 +87,7 @@ export class LongRunningProcess {
 
         // no need to directly react to this -- JobNew and _checkState() will pick up when the unit runs
         // Use SIGINT (Ctrl+C) instead of SIGTERM when stopping the service
-        const result = cockpit.spawn(["systemd-run", "--user", "--unit", this.serviceName, "--service-type=oneshot", "--no-block", "--property=KillSignal=SIGINT", "--"].concat(argv),
+        const result = cockpit.spawn(["systemd-run", "--user", "--unit", this.serviceName, "--service-type=simple", "--no-block", "--property=KillSignal=SIGINT", "--"].concat(argv),
                              { err: "message", ...options });
         
         // Force immediate state check after starting
@@ -186,9 +188,26 @@ export class LongRunningProcess {
     }
 
     _setStateFromProperties(activeState, stateChangeTimestamp) {
+        // https://www.freedesktop.org/software/systemd/man/latest/org.freedesktop.systemd1.html
         // console.log("Setting state from properties:", activeState, stateChangeTimestamp);
+        this.serviceStateStr = activeState;
+        
         switch (activeState) {
+        case 'deactivating':
+            this._setState(ProcessState.BUSY);
+            break;
+        case 'maintenance':
+            this._setState(ProcessState.BUSY);
+            break;
+        case 'reloading':
+            this._setState(ProcessState.BUSY);
+            break;
+        case 'refreshing':
+            this._setState(ProcessState.BUSY);
+            break;
         case 'activating':
+            this._setState(ProcessState.BUSY);
+            break;
         case 'active':
             this.startTimestamp = stateChangeTimestamp;
             this._setState(ProcessState.RUNNING);
@@ -204,9 +223,6 @@ export class LongRunningProcess {
             break;
         case 'inactive':
             this._setState(ProcessState.STOPPED);
-            break;
-        case 'deactivating':
-            /* ignore these transitions */
             break;
         default:
             throw new Error(`unexpected state of unit ${this.serviceName}: ${activeState}`);
