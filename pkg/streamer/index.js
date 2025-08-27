@@ -16,25 +16,27 @@ let streamerProcess = null;
 let userName = "";
 let userHomeDir = "";
 
+function printError(message) {
+    result.style.color = "red";
+    result.textContent = message;
+}
+
 function streamer_run() {
 
     if("" === command.value) {
-        result.style.color = "red";
-        result.textContent = "Error: Command cannot be empty";
+        printError("Command cannot be empty");
         command.focus();
         return;
     }
 
     if("" === fwPath.value) {
-        result.style.color = "red";
-        result.textContent = "Error: Firmware Path cannot be empty";
+        printError("Firmware Path cannot be empty");
         fwPath.focus();
         return;
     }
 
     if("" === numFrames.value) {
-        result.style.color = "red";
-        result.textContent = "Error: Number of Frames cannot be empty";
+        printError("Number of Frames cannot be empty");
         numFrames.focus();
         return;
     }
@@ -63,9 +65,8 @@ function streamer_success() {
 }
 
 function streamer_fail() {
-    result.style.color = "red";
-    result.textContent = "fail";
-    
+    printError("streamer failed");
+
     // Reset button states
     startButton.disabled = false;
     stopButton.disabled = true;
@@ -103,24 +104,33 @@ clearButton.addEventListener("click", () => {
 // Send a 'init' message.  This tells integration tests that we are ready to go
 cockpit.transport.wait(function() {
 
-    cockpit.user().then(user => {
-        userHomeDir = user.home;
-        userName = user.name;
-    }).catch(() => {
-        runButton.setAttribute("disabled", "");
-        state.textContent = "Error: Unable to determine user name and user home directory";
+    // check admin previleges
+    const permission = cockpit.permission({ admin: true });
+
+    permission.addEventListener("changed", () => {
+
+        if(!permission.allowed) {
+            startButton.setAttribute("disabled", "");
+            printError("You need administrator privileges to run this command");
+            return;
+        }
+
+        userName = permission.user.name;
+        userHomeDir = permission.user.home;
+
+        command.value = default_command;
+        fwPath.value = default_fw_path;
+        numFrames.value = default_num_frames;
+
+        streamId.innerHTML = '';
+        for (let i = 0; i <= 255; i++) {
+            const option = document.createElement('option');
+            option.value = i;
+            option.text = i;
+            if (i === default_stream_id) option.selected = true;
+            streamId.appendChild(option);
+        }
+
     });
 
-    command.value = default_command;
-    fwPath.value = default_fw_path;
-    numFrames.value = default_num_frames;
-
-    streamId.innerHTML = '';
-    for (let i = 0; i <= 255; i++) {
-        const option = document.createElement('option');
-        option.value = i;
-        option.text = i;
-        if (i === default_stream_id) option.selected = true;
-        streamId.appendChild(option);
-    }
 });

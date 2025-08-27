@@ -32,28 +32,38 @@ function showJournal(unitName, filter_arg) {
             .catch(ex => { output.textContent = JSON.stringify(ex) });
 }
 
+function printError(message) {
+    state.style.color = "red";
+    state.textContent = message;
+}
+
 function update(process) {
     // console.log("Update called with state:", process.state);
     state.textContent = cockpit.format("$0 : $1", process.serviceName, process.serviceStateStr);
 
     switch (process.state) {
     case ProcessState.INIT:
+        state.style.color = "black";
         break;
     case ProcessState.BUSY:
+        state.style.color = "orange";
         runButton.disabled = true;
         runButton.textContent = "Working...";
         break;
     case ProcessState.STOPPED:
+        state.style.color = "black";
         runButton.disabled = false;
         runButton.textContent = "Start";
         break;
     case ProcessState.RUNNING:
+        state.style.color = "green";
         runButton.disabled = false;
         runButton.textContent = "Terminate";
         // StateChangeTimestamp property is in µs since epoch, but journalctl expects seconds
         showJournal(process.serviceName, "--since=@" + Math.floor(process.startTimestamp / 1000000));
         break;
     case ProcessState.FAILED:
+        state.style.color = "red";
         runButton.disabled = false;
         runButton.textContent = "Reset";
         // Show the whole journal of this boot
@@ -106,20 +116,21 @@ function init(userName, userHomeDir) {
             output.textContent = "";
 
             if("" === command.value) {
-                state.textContent = "Error: Command cannot be empty";
+                state.style.color = "red";
+                printError("Command cannot be empty");
                 command.focus();
                 return;
             }
 
             if("" === fwPath.value) {
-                state.textContent = "Error: Firmware Path cannot be empty";
+                printError("Firmware Path cannot be empty");
                 fwPath.focus();
                 return;
             }
             
             process.run(["/bin/stdbuf", "-oL", "-eL", "/bin/bash", command.value, userName, userHomeDir, fwPath.value, numStreams.value])
                     .catch(ex => {
-                        state.textContent = "Error: " + ex.toString();
+                        printError(ex.toString());
                         runButton.disabled = true;
                     });
         }
@@ -137,7 +148,7 @@ cockpit.transport.wait(() => {
 
         if(!permission.allowed) {
             runButton.disabled = true;
-            state.textContent = "Error: You need administrator privileges to run this command.";
+            printError("You need administrator privileges to run this command");
             return;
         }
 
