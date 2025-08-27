@@ -48,7 +48,8 @@ export class LongRunningProcess {
      *                 argument is `this` LongRunningProcess instance.
      */
     constructor(serviceName, updateCallback) {
-        this.systemdClient = cockpit.dbus("org.freedesktop.systemd1", {"bus" : "session"});
+        // NOTE : session bus updated to system bus, superuser required added
+        this.systemdClient = cockpit.dbus("org.freedesktop.systemd1", {"bus" : "system",  superuser: "require" });
         this.serviceName = serviceName;
         this.updateCallback = updateCallback;
         this._setState(ProcessState.INIT);
@@ -87,8 +88,9 @@ export class LongRunningProcess {
 
         // no need to directly react to this -- JobNew and _checkState() will pick up when the unit runs
         // Use SIGINT (Ctrl+C) instead of SIGTERM when stopping the service
-        const result = cockpit.spawn(["systemd-run", "--user", "--unit", this.serviceName, "--service-type=simple", "--no-block", "--property=KillSignal=SIGINT", "--"].concat(argv),
-                             { err: "message", ...options });
+        // NOTE : `--user` removed, superuser required added
+        const result = cockpit.spawn(["systemd-run", "--unit", this.serviceName, "--service-type=simple", "--no-block", "--property=KillSignal=SIGINT", "--"].concat(argv),
+                             {superuser: "require", err: "message", ...options });
         
         // Force immediate state check after starting
         setTimeout(() => {

@@ -25,8 +25,9 @@ function showJournal(unitName, filter_arg) {
     // reset previous output
     output.textContent = "";
 
-    const argv = ["journalctl", "--user", "--output=cat", "--unit", unitName, "--follow", "--lines=all", filter_arg];
-    showJournal.journalctl = cockpit.spawn(argv, { err: "message" })
+    // NOTE : `--user` removed, superuser required added
+    const argv = ["journalctl", "--output=cat", "--unit", unitName, "--follow", "--lines=all", filter_arg];
+    showJournal.journalctl = cockpit.spawn(argv, { superuser: "require", err: "message" })
             .stream(data => output.append(document.createTextNode(data)))
             .catch(ex => { output.textContent = JSON.stringify(ex) });
 }
@@ -65,6 +66,16 @@ function update(process) {
 
 // called once after page initializes; set up the page
 cockpit.transport.wait(() => {
+
+    let userName = "";
+    let userHomeDir = "";
+    cockpit.user().then(user => {
+        userHomeDir = user.home;
+        userName = user.name;
+    }).catch(() => {
+        runButton.setAttribute("disabled", "");
+        state.textContent = "Error: Unable to determine user name and user home directory";
+    });
 
     numStreams.innerHTML = '';
     for (let i = 1; i <= 256; i++) {
@@ -117,7 +128,7 @@ cockpit.transport.wait(() => {
                 return;
             }
             
-            process.run(["/bin/stdbuf", "-oL", "-eL", "/bin/bash", command.value, fwPath.value, numStreams.value])
+            process.run(["/bin/stdbuf", "-oL", "-eL", "/bin/bash", command.value, userName, userHomeDir, fwPath.value, numStreams.value])
                     .catch(ex => {
                         state.textContent = "Error: " + ex.toString();
                         runButton.setAttribute("disabled", "");

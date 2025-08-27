@@ -13,6 +13,8 @@ const default_fw_path = "/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/
 const default_stream_id = 0;
 const default_num_frames = 100;
 let streamerProcess = null;
+let userName = "";
+let userHomeDir = "";
 
 function streamer_run() {
 
@@ -37,7 +39,7 @@ function streamer_run() {
         return;
     }
 
-    streamerProcess = cockpit.spawn(["/bin/stdbuf", "-oL", "-eL", "/bin/bash", command.value, fwPath.value, streamId.value, numFrames.value]);
+    streamerProcess = cockpit.spawn(["/bin/stdbuf", "-oL", "-eL", "/bin/bash", command.value, userName, userHomeDir, fwPath.value, streamId.value, numFrames.value], {superuser: "require"});
     streamerProcess.stream(streamer_output)
             .then(streamer_success)
             .catch(streamer_fail);
@@ -100,6 +102,15 @@ clearButton.addEventListener("click", () => {
 
 // Send a 'init' message.  This tells integration tests that we are ready to go
 cockpit.transport.wait(function() {
+
+    cockpit.user().then(user => {
+        userHomeDir = user.home;
+        userName = user.name;
+    }).catch(() => {
+        runButton.setAttribute("disabled", "");
+        state.textContent = "Error: Unable to determine user name and user home directory";
+    });
+
     command.value = default_command;
     fwPath.value = default_fw_path;
     numFrames.value = default_num_frames;
