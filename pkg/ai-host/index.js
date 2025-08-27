@@ -145,7 +145,6 @@ cockpit.transport.wait(() => {
         const userHomeDir = permission.user.home;
 
         init(userName, userHomeDir);
-        init_called = true;
 
     });
 
