@@ -15,7 +15,28 @@ const default_num_frames = 100;
 let streamerProcess = null;
 
 function streamer_run() {
-    /* global cockpit */
+
+    if("" === command.value) {
+        result.style.color = "red";
+        result.textContent = "Error: Command cannot be empty";
+        command.focus();
+        return;
+    }
+
+    if("" === fwPath.value) {
+        result.style.color = "red";
+        result.textContent = "Error: Firmware Path cannot be empty";
+        fwPath.focus();
+        return;
+    }
+
+    if("" === numFrames.value) {
+        result.style.color = "red";
+        result.textContent = "Error: Number of Frames cannot be empty";
+        numFrames.focus();
+        return;
+    }
+
     streamerProcess = cockpit.spawn(["/bin/stdbuf", "-oL", "-eL", "/bin/bash", command.value, fwPath.value, streamId.value, numFrames.value]);
     streamerProcess.stream(streamer_output)
             .then(streamer_success)

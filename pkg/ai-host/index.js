@@ -105,15 +105,15 @@ cockpit.transport.wait(() => {
         else {
             output.textContent = "";
 
-            if("" === fwPath.value) {
-                state.textContent = "Error: Firmware Path cannot be empty";
-                fwPath.focus();
-                return;
-            }
-
             if("" === command.value) {
                 state.textContent = "Error: Command cannot be empty";
                 command.focus();
+                return;
+            }
+
+            if("" === fwPath.value) {
+                state.textContent = "Error: Firmware Path cannot be empty";
+                fwPath.focus();
                 return;
             }
             
