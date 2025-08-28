@@ -41,6 +41,7 @@ function streamer_run() {
         return;
     }
 
+    // NOTE : superuser required added
     streamerProcess = cockpit.spawn(["/bin/stdbuf", "-oL", "-eL", "/bin/bash", command.value, userName, userHomeDir, fwPath.value, streamId.value, numFrames.value], {superuser: "require"});
     streamerProcess.stream(streamer_output)
             .then(streamer_success)
