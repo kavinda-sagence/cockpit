@@ -1,0 +1,10 @@
+{
+    "version": 0,
+
+    "tools": {
+        "temp-monitor": {
+            "label": "Example",
+            "path": "index.html"
+        }
+    }
+}

@@ -46,6 +46,10 @@ const info = {
         "ai-host/long-running-process-usr.js",
 
         "streamer/index.js",
+
+        "example/index.js",
+
+        "hawkeye/index.js"
     ],
 
     tests: [
@@ -156,6 +160,12 @@ const info = {
 
         "streamer/index.html",
         "streamer/index.css",
+
+        "example/index.html",
+        "example/index.css",
+
+        "hawkeye/index.html",
+        "hawkeye/index.css"
     ]
 };
 

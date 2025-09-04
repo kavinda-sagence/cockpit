@@ -1,0 +1,10 @@
+{
+    "version": 0,
+
+    "tools": {
+        "hawkeye": {
+            "label": "Hawkeye",
+            "path": "index.html"
+        }
+    }
+}

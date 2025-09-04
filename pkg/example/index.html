@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Temperature Monitor</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="index.css" type="text/css" rel="stylesheet">
+    <script src="../base1/cockpit.js"></script>
+    <script src="index.js"></script>
+</head>
+<body>
+    <div class="container-fluid">
+        <h1>Temperature Monitor</h1>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="panel panel-default">
+                    <div class="panel-heading">
+                        <h3 class="panel-title">Current Temperatures</h3>
+                    </div>
+                    <div class="panel-body">
+                        <p>CPU Temperature: <span id="cpu-temp" class="temperature-value">--</span></p>
+                        <p>Ambient Temperature: <span id="ambient-temp" class="temperature-value">--</span></p>
+                        <div id="status-area"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="panel panel-default">
+                    <div class="panel-heading">
+                        <h3 class="panel-title">Controls</h3>
+                    </div>
+                    <div class="panel-body">
+                        <button id="update-config" class="btn btn-primary">Update Config</button>
+                        <button id="request-temp" class="btn btn-default">Request Temperature</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
