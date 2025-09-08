@@ -16,7 +16,7 @@
             try {
                 this.channel = cockpit.channel({
                     "payload": "stream",
-                    "spawn": ["/home/kavinda/Desktop/MySpace/code/cockpit/hawkeye_bridge/hawkeye-bridge.py"],
+                    "spawn": ["/home/kavinda/Desktop/MySpace/code/cockpit/hawkeye_bridge/hawkeye-bridge.sh"],
                     "err": "message"  // Capture stderr
                 });
 
