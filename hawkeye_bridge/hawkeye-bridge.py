@@ -2,152 +2,269 @@
 
 import sys
 import json
-import asyncio
 import os
 import logging
-from datetime import datetime
-from typing import Dict, Any
+import signal
+from typing import Dict, Any, Optional
+from threading import Thread
+import queue
+import time
+import select
 
 
 class Logger:
-    def __init__(self, log_file_name: str = "hawkeye-bridge.log", recreate_file: bool = False):
-        """Initialize logger with file in same directory as the script
-        
-        Args:
-            log_file_name: Name of the log file
-            recreate_file: If True, removes existing log file before creating new one
-        """
+    def __init__(self, log_file_name: str, recreate_file: bool = True):
+        """Initialize logger with file in same directory as the script"""
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.log_file_path = os.path.join(script_dir, log_file_name)
         
-        # Remove existing log file if recreate_file is True
         if recreate_file and os.path.exists(self.log_file_path):
             os.remove(self.log_file_path)
         
-        # Configure logging
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(self.log_file_path)
-            ]
-        )
-        self.logger = logging.getLogger(__name__)
+        # Create a unique logger name based on the log file name
+        logger_name = f"logger_{log_file_name.replace('.', '_').replace('-', '_')}"
+        self.logger = logging.getLogger(logger_name)
+        
+        # Remove any existing handlers to avoid duplicates
+        self.logger.handlers.clear()
+        
+        # Set the logger level
+        self.logger.setLevel(logging.INFO)
+        
+        # Create file handler for this specific logger
+        file_handler = logging.FileHandler(self.log_file_path)
+        file_handler.setLevel(logging.INFO)
+        
+        # Create formatter
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        
+        # Add handler to logger
+        self.logger.addHandler(file_handler)
+        
+        # Prevent propagation to root logger to avoid duplicate logs
+        self.logger.propagate = False
     
     def info(self, message: str) -> None:
-        """Log info message"""
         self.logger.info(message)
     
     def error(self, message: str) -> None:
-        """Log error message"""
         self.logger.error(message)
     
     def warning(self, message: str) -> None:
-        """Log warning message"""
         self.logger.warning(message)
-    
-    def debug(self, message: str) -> None:
-        """Log debug message"""
-        self.logger.debug(message)
-    
-    def critical(self, message: str) -> None:
-        """Log critical message"""
-        self.logger.critical(message)
-    
-    def log_with_timestamp(self, level: str, message: str) -> None:
-        """Log message with custom timestamp"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        formatted_message = f"[{timestamp}] {message}"
-        
-        if level.lower() == 'info':
-            self.info(formatted_message)
-        elif level.lower() == 'error':
-            self.error(formatted_message)
-        elif level.lower() == 'warning':
-            self.warning(formatted_message)
-        elif level.lower() == 'debug':
-            self.debug(formatted_message)
-        elif level.lower() == 'critical':
-            self.critical(formatted_message)
-        else:
-            self.info(formatted_message)
 
 
-class HawkeyeBridge:
+class MessageBridge:
+    """Bridge that handles stdin/stdout in a separate thread"""
+    
     def __init__(self):
-        """Initialize HawkeyeBridge
+        self.running = False
+        self.shutdown_requested = False
+        self.logger = Logger("message-bridge.log")
         
-        Args:
-            recreate_log: If True, recreates the log file on startup
-        """
-        self.message_types = {'ack', 'status', 'error', 'data'}
-        self.running = True
-        self.logger = Logger(recreate_file=True)  # Initialize logger
-
-    async def send_message(self, msg_type: str, message: Any) -> None:
-        """Send message asynchronously"""
-        if msg_type not in self.message_types:
-            await self.log_error(f"Invalid message type: {msg_type}")
+        # Thread-safe queues for communication
+        self.incoming_queue: queue.Queue[Dict[str, Any]] = queue.Queue()
+        self.outgoing_queue: queue.Queue[Dict[str, Any]] = queue.Queue()
+        
+        self.bridge_thread: Optional[Thread] = None
+    
+    def start(self):
+        """Start the bridge in a separate thread"""
+        if self.running:
+            self.logger.warning("Bridge is already running")
             return
-
+        
+        self.running = True
+        self.bridge_thread = Thread(target=self._run_bridge, daemon=True)
+        self.bridge_thread.start()
+        self.logger.info("Bridge started")
+    
+    def stop(self):
+        """Stop the bridge"""
+        self.running = False
+        if self.bridge_thread:
+            self.bridge_thread.join(timeout=2)
+        self.logger.info("Bridge stopped")
+    
+    def push_message(self, type: str, data: Any):
+        """Push message to send (thread-safe)"""
+        msg = {'type': type, 'data': data}
+        self.outgoing_queue.put(msg)
+    
+    def pop_message(self, timeout: float = 0.1) -> Optional[Dict[str, Any]]:
+        """Pop received message (thread-safe)"""
         try:
-            data = json.dumps({'type': msg_type, 'message': message}) + '\n'
-            sys.stdout.write(data)
-            sys.stdout.flush()
-            self.logger.info(f"Sent message - Type: {msg_type}, Message: {message}")
-        except Exception as e:
-            await self.log_error(f"Error sending message: {e}")
-
-    async def log_error(self, message: str) -> None:
-        """Log error asynchronously"""
-        self.logger.error(message)
-        print(f"Error: {message}", file=sys.stderr, flush=True)
-
-    async def handle_message(self, message: Dict[str, Any]) -> None:
-        """Handle messages asynchronously"""
-        self.logger.info(f"Received message: {message}")
-        await self.send_message('ack', message)
-
-    async def run(self) -> None:
-        """Main async event loop"""
-        self.logger.info("Starting Hawkeye Bridge")
-        await self.send_message('status', 'Hawkeye Bridge started')
+            return self.incoming_queue.get(timeout=timeout)
+        except queue.Empty:
+            return None
+    
+    def is_shutdown_requested(self) -> bool:
+        """Check if shutdown has been requested"""
+        return self.shutdown_requested
+    
+    def _run_bridge(self):
+        """Main bridge loop - runs in separate thread"""
+        self.logger.info("Bridge thread started")
         
         try:
-            async for line in self.read_stdin():
-                if not self.running:
-                    self.logger.info("Bridge stopping - running flag set to False")
-                    break
+            while self.running:
+                # Handle outgoing messages
                 try:
-                    message = json.loads(line.strip())
-                    await self.handle_message(message)
+                    msg = self.outgoing_queue.get(timeout=0.1)
+                    data = json.dumps(msg) + '\n'
+                    sys.stdout.write(data)
+                    sys.stdout.flush()
+                    self.logger.info(f"Sent: {msg}")
+                except queue.Empty:
+                    pass
+                except Exception as e:
+                    self.logger.error(f"Error sending message: {e}")
+                
+                # Handle incoming messages (non-blocking check)
+                try:
+                    # Use select to check if stdin has data available (Unix/Linux)
+                    if select.select([sys.stdin], [], [], 0.01)[0]:
+                        line = sys.stdin.readline()
+                        if not line:  # Empty string means stdin was closed
+                            self.logger.info("stdin closed, requesting shutdown")
+                            self.shutdown_requested = True
+                            break
+                        if line.strip():
+                            message = json.loads(line.strip())
+                            self.incoming_queue.put(message)
+                            self.logger.info(f"Received: {message}")
                 except json.JSONDecodeError as e:
-                    await self.log_error(f"JSON decode error: {e}")
+                    self.logger.error(f"JSON decode error: {e}")
+                except Exception as e:
+                    self.logger.error(f"Error reading stdin: {e}")
+                    # If we can't read from stdin, assume it's closed
+                    self.logger.info("stdin error, requesting shutdown")
+                    self.shutdown_requested = True
+                    break
+                
+                # Small delay to prevent busy waiting
+                time.sleep(0.01)
+                
         except Exception as e:
-            self.logger.critical(f"Critical error in main loop: {e}")
+            self.logger.error(f"Bridge thread error: {e}")
         finally:
-            self.logger.info("Hawkeye Bridge stopping")
-            await self.send_message('status', 'Hawkeye Bridge stopped')
+            self.logger.info("Bridge thread ended")
 
-    async def read_stdin(self):
-        """Async generator for reading stdin"""
-        loop = asyncio.get_event_loop()
-        reader = asyncio.StreamReader()
-        protocol = asyncio.StreamReaderProtocol(reader)
-        await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+
+class TaskHandler:
+    """Handles application tasks in a separate thread"""
+    
+    def __init__(self, bridge: MessageBridge):
+        self.bridge = bridge
+        self.running = False
+        self.logger = Logger("task-handler.log")
+        self.task_thread: Optional[Thread] = None
+    
+    def start(self):
+        """Start the task handler in a separate thread"""
+        if self.running:
+            self.logger.warning("Task handler is already running")
+            return
         
-        async for line in reader:
-            yield line.decode('utf-8')
+        self.running = True
+        self.task_thread = Thread(target=self._run_tasks, daemon=True)
+        self.task_thread.start()
+        self.logger.info("Task handler started")
+    
+    def stop(self):
+        """Stop the task handler"""
+        self.running = False
+        if self.task_thread:
+            self.task_thread.join(timeout=2)
+        self.logger.info("Task handler stopped")
+    
+    def _run_tasks(self):
+        """Main task loop - runs in separate thread"""
+        self.logger.info("Task handler thread started")
+        
+        try:
+            while self.running:
+                # Check if bridge requested shutdown
+                if self.bridge.is_shutdown_requested():
+                    self.logger.info("Shutdown requested by bridge, stopping task handler")
+                    break
+                
+                # Process incoming messages
+                message = self.bridge.pop_message(timeout=0.1)
+                if message:
+                    self._handle_message(message)
+                
+                # Do your custom tasks here
+                self._do_custom_tasks()
+                
+                # Small delay
+                time.sleep(0.01)
+                
+        except Exception as e:
+            self.logger.error(f"Task handler error: {e}")
+        finally:
+            self.logger.info("Task handler thread ended")
+    
+    def _handle_message(self, message: Dict[str, Any]):
+        """Handle incoming messages"""
+        message_type = message.get('type', 'unknown')
+        message_content = message.get('data', '')
+
+        self.logger.info(f"Handling message: {message}")
+
+        self.bridge.push_message('ack', {'message_type' : message_type, 'message_content' : message_content})
+
+    def _do_custom_tasks(self):
+        """Add your custom periodic tasks here"""
+        # Example: send heartbeat every 10 seconds
+        heartbeat_interval = 10
+        if hasattr(self, '_last_heartbeat'):
+            if time.time() - self._last_heartbeat > heartbeat_interval:
+                self.bridge.push_message('heartbeat', 'Task handler alive')
+                self._last_heartbeat = time.time()
+        else:
+            self._last_heartbeat = time.time()
+
+
+def main():
+    """Simple main function"""
+    # Create bridge and task handler
+    logger = Logger("main.log")
+    bridge = MessageBridge()
+    task_handler = TaskHandler(bridge)
+    
+    # Signal handler for graceful shutdown
+    def signal_handler(signum: int, frame: Any) -> None:
+        logger.info(f"Received signal {signum}, shutting down...")
+        bridge.shutdown_requested = True
+    
+    # Register signal handlers
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    try:
+        # Start both threads
+        bridge.start()
+        task_handler.start()
+
+        logger.info("Bridge and task handler started.")
+
+        # Keep main thread alive and check for shutdown requests
+        while not bridge.is_shutdown_requested():
+            time.sleep(0.1)
+            
+        logger.info("Shutdown requested, stopping...")
+            
+    except KeyboardInterrupt:
+        logger.info("\nKeyboardInterrupt received, stopping...")
+    finally:
+        # Stop both threads
+        task_handler.stop()
+        bridge.stop()
+        logger.info("Stopped.")
+        sys.exit(0)
 
 
 if __name__ == '__main__':
-    bridge = HawkeyeBridge()
-    bridge.logger.info("Hawkeye Bridge application started")
-    try:
-        asyncio.run(bridge.run())
-    except KeyboardInterrupt:
-        bridge.logger.info("Bridge interrupted by user")
-    except Exception as e:
-        bridge.logger.critical(f"Unhandled exception: {e}")
-    finally:
-        bridge.logger.info("Hawkeye Bridge application ended")
+    main()

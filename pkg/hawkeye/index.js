@@ -1,3 +1,5 @@
+const { Timestamp } = require("@patternfly/react-core");
+
 (function() {
     "use strict";
 
@@ -9,6 +11,7 @@
             this.reconnectAttempts = 0;
             this.maxReconnectAttempts = 5;
             this.reconnectDelay = 1000;
+            this.isDisconnecting = false;
             this.connect();
         }
 
@@ -88,6 +91,9 @@
                 case 'data':
                     this.handleData(message.message);
                     break;
+                case 'heartbeat':
+                    this.handleData(message.message);
+                    break;
                 case 'ack':
                     this.handleAck(message.message);
                     break;
@@ -122,7 +128,10 @@
                 console.error("Channel closed with problem:", options.problem);
             }
 
-            this.scheduleReconnect();
+            // Only attempt to reconnect if we're not intentionally disconnecting
+            if (!this.isDisconnecting) {
+                this.scheduleReconnect();
+            }
         }
 
         scheduleReconnect() {
@@ -141,13 +150,13 @@
             }, delay);
         }
 
-        sendCommand(command, data = {}) {
+        sendCommand(type, data) {
             if (!this.channel) {
                 console.error("Channel not available");
                 return false;
             }
 
-            const message = { command, ...data };
+            const message = { type, data };
             const jsonMessage = JSON.stringify(message) + '\n';
 
             console.log("Sending message:", message);
@@ -162,6 +171,7 @@
         }
 
         disconnect() {
+            this.isDisconnecting = true;
             if (this.channel) {
                 this.channel.close();
                 this.channel = null;
@@ -177,7 +187,7 @@
         const sendButton = document.getElementById("send");
         if (sendButton) {
             sendButton.addEventListener("click", () => {
-                hawkeye.sendCommand('ping', { timestamp: Date.now() });
+                hawkeye.sendCommand('ping', {Timestamp: Date.now()});
             });
         }
 
