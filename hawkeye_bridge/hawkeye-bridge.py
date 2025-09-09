@@ -13,7 +13,7 @@ import select
 
 aix_endpoint_lib_path = os.path.abspath("/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/streamer/aix_endpoint")
 sys.path.append(aix_endpoint_lib_path)
-from aix_endpoint import HostInfoStruct, HostInfo
+from aix_endpoint import HostInfoStruct, get_host_info
 
 
 class Logger:
@@ -165,9 +165,6 @@ class TaskHandler:
         self.logger = Logger("task-handler.log")
         self.task_thread: Optional[Thread] = None
 
-        self.host_info = HostInfo()
-        self.host_info_struct = self.host_info.get_host_info()
-
     def start(self):
         """Start the task handler in a separate thread"""
         if self.running:
@@ -222,21 +219,24 @@ class TaskHandler:
         self.bridge.push_message('ack', {'message_type' : message_type, 'message_content' : message_content})
 
     def _send_status(self):
-        """Send status every 10 seconds"""
-        status_interval = 10
+        """Send status every 3 seconds"""
+        status_interval = 3
         if hasattr(self, '_last_status'):
             if time.time() - self._last_status > status_interval:
-
-                status_message = {
-                    'iope_temperature': self.host_info_struct.iope_temperature,
-                    'sub_array_0_temperature': self.host_info_struct.sub_array_0_temperature,
-                    'sub_array_1_temperature': self.host_info_struct.sub_array_1_temperature,
-                    'sub_array_2_temperature': self.host_info_struct.sub_array_2_temperature,
-                    'sub_array_3_temperature': self.host_info_struct.sub_array_3_temperature
-                }
-
-                self.bridge.push_message('status', status_message)
-                self._last_status = time.time()
+                try:
+                    host_info_struct: HostInfoStruct = get_host_info()
+                    status_message = {
+                        'iope_temperature': host_info_struct.iope_temperature,
+                        'sub_array_0_temperature': host_info_struct.sub_array_0_temperature,
+                        'sub_array_1_temperature': host_info_struct.sub_array_1_temperature,
+                        'sub_array_2_temperature': host_info_struct.sub_array_2_temperature,
+                        'sub_array_3_temperature': host_info_struct.sub_array_3_temperature
+                    }
+                    self.bridge.push_message('status', status_message)
+                except Exception as e:
+                    self.logger.warning(f"Unable to get host info: {e}")
+                finally:
+                    self._last_status = time.time()
         else:
             self._last_status = time.time()
 
