@@ -99,6 +99,8 @@ const { Timestamp } = require("@patternfly/react-core");
         handleStatus(message) {
             console.log("Status:", message);
             // Update UI status indicator here
+            // {iope_temperature: 0.12300000339746475, sub_array_0_temperature: 0.12300000339746475, sub_array_1_temperature: 1.1230000257492065, sub_array_2_temperature: 2.122999906539917, sub_array_3_temperature: 3.122999906539917}
+            
         }
 
         handleError(message) {

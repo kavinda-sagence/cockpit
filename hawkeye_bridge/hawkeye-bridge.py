@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 
-import sys
-import json
-import os
-import logging
+import sys, os
 import signal
+import json
+import logging
 from typing import Dict, Any, Optional
 from threading import Thread
 import queue
 import time
 import select
+
+
+aix_endpoint_lib_path = os.path.abspath("/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/streamer/aix_endpoint")
+sys.path.append(aix_endpoint_lib_path)
+from aix_endpoint import HostInfoStruct, HostInfo
 
 
 class Logger:
@@ -160,7 +164,10 @@ class TaskHandler:
         self.running = False
         self.logger = Logger("task-handler.log")
         self.task_thread: Optional[Thread] = None
-    
+
+        self.host_info = HostInfo()
+        self.host_info_struct = self.host_info.get_host_info()
+
     def start(self):
         """Start the task handler in a separate thread"""
         if self.running:
@@ -219,7 +226,16 @@ class TaskHandler:
         status_interval = 10
         if hasattr(self, '_last_status'):
             if time.time() - self._last_status > status_interval:
-                self.bridge.push_message('status', 'Task handler alive')
+
+                status_message = {
+                    'iope_temperature': self.host_info_struct.iope_temperature,
+                    'sub_array_0_temperature': self.host_info_struct.sub_array_0_temperature,
+                    'sub_array_1_temperature': self.host_info_struct.sub_array_1_temperature,
+                    'sub_array_2_temperature': self.host_info_struct.sub_array_2_temperature,
+                    'sub_array_3_temperature': self.host_info_struct.sub_array_3_temperature
+                }
+
+                self.bridge.push_message('status', status_message)
                 self._last_status = time.time()
         else:
             self._last_status = time.time()
