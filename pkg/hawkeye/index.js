@@ -83,19 +83,13 @@ const { Timestamp } = require("@patternfly/react-core");
             // Handle different message types
             switch (message.type) {
                 case 'status':
-                    this.handleStatus(message.message);
+                    this.handleStatus(message.data);
                     break;
                 case 'error':
-                    this.handleError(message.message);
-                    break;
-                case 'data':
-                    this.handleData(message.message);
-                    break;
-                case 'heartbeat':
-                    this.handleData(message.message);
+                    this.handleError(message.data);
                     break;
                 case 'ack':
-                    this.handleAck(message.message);
+                    this.handleAck(message.data);
                     break;
                 default:
                     console.warn("Unknown message type:", message.type);
@@ -110,11 +104,6 @@ const { Timestamp } = require("@patternfly/react-core");
         handleError(message) {
             console.error("Bridge error:", message);
             // Show error notification to user
-        }
-
-        handleData(message) {
-            console.log("Data received:", message);
-            // Process actual data here
         }
 
         handleAck(message) {

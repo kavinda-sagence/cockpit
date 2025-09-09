@@ -195,8 +195,7 @@ class TaskHandler:
                 if message:
                     self._handle_message(message)
                 
-                # Do your custom tasks here
-                self._do_custom_tasks()
+                self._send_status()
                 
                 # Small delay
                 time.sleep(0.01)
@@ -215,16 +214,15 @@ class TaskHandler:
 
         self.bridge.push_message('ack', {'message_type' : message_type, 'message_content' : message_content})
 
-    def _do_custom_tasks(self):
-        """Add your custom periodic tasks here"""
-        # Example: send heartbeat every 10 seconds
-        heartbeat_interval = 10
-        if hasattr(self, '_last_heartbeat'):
-            if time.time() - self._last_heartbeat > heartbeat_interval:
-                self.bridge.push_message('heartbeat', 'Task handler alive')
-                self._last_heartbeat = time.time()
+    def _send_status(self):
+        """Send status every 10 seconds"""
+        status_interval = 10
+        if hasattr(self, '_last_status'):
+            if time.time() - self._last_status > status_interval:
+                self.bridge.push_message('status', 'Task handler alive')
+                self._last_status = time.time()
         else:
-            self._last_heartbeat = time.time()
+            self._last_status = time.time()
 
 
 def main():
