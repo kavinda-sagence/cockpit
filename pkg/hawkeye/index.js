@@ -17,10 +17,17 @@ const { Timestamp } = require("@patternfly/react-core");
 
         connect() {
             try {
+
+                const hawkeyeBridgePath = "/home/kavinda/Desktop/MySpace/code/cockpit/hawkeye_bridge/";
+                const hawkeyeBridgeScript = "hawkeye-bridge.sh";
+
                 this.channel = cockpit.channel({
                     "payload": "stream",
-                    "spawn": ["/home/kavinda/Desktop/MySpace/code/cockpit/hawkeye_bridge/hawkeye-bridge.sh"],
-                    "err": "message"  // Capture stderr
+                    "spawn": [hawkeyeBridgePath + hawkeyeBridgeScript],
+                    "err": "ignore",  // Ignore stderr to prevent it from reaching frontend
+                    "directory": hawkeyeBridgePath,
+                    "environ": [],
+                    "binary": false
                 });
 
                 this.channel.addEventListener("message", (event, data) => {
@@ -37,7 +44,7 @@ const { Timestamp } = require("@patternfly/react-core");
                     this.reconnectAttempts = 0;
                 });
 
-                // Handle stderr messages
+                // Handle stderr messages (should not occur due to "err": "ignore")
                 this.channel.addEventListener("control", (event, options) => {
                     if (options.command === "done" && options.problem) {
                         console.error("Bridge process error:", options.problem);
@@ -56,6 +63,12 @@ const { Timestamp } = require("@patternfly/react-core");
             
             lines.forEach(line => {
                 if (line.trim()) {
+                    // Skip lines that don't look like JSON (error messages)
+                    if (!line.trim().startsWith('{')) {
+                        console.warn("Skipping non-JSON line:", line);
+                        return;
+                    }
+                    
                     try {
                         const message = JSON.parse(line);
                         this.handleMessage(message);

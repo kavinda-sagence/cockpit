@@ -13,7 +13,7 @@ import select
 
 aix_endpoint_lib_path = os.path.abspath("/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/streamer/aix_endpoint")
 sys.path.append(aix_endpoint_lib_path)
-from aix_endpoint import HostInfoStruct, get_host_info
+from aix_endpoint import HostInfoStruct, get_host_info, ai_out_mute, ai_warn_mute, ai_err_mute
 
 
 class Logger:
@@ -242,7 +242,10 @@ class TaskHandler:
 
 
 def main():
-    """Simple main function"""
+    ai_out_mute()
+    ai_warn_mute() 
+    ai_err_mute()
+
     # Create bridge and task handler
     logger = Logger("main.log")
     bridge = MessageBridge()
