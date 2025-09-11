@@ -5,7 +5,8 @@ import signal
 import json
 import logging
 from typing import Dict, Any, Optional
-from threading import Thread
+import threading
+import subprocess
 import queue
 import time
 import select
@@ -70,9 +71,9 @@ class MessageBridge:
         # Thread-safe queues for communication
         self.incoming_queue: queue.Queue[Dict[str, Any]] = queue.Queue()
         self.outgoing_queue: queue.Queue[Dict[str, Any]] = queue.Queue()
-        
-        self.bridge_thread: Optional[Thread] = None
-    
+
+        self.bridge_thread: Optional[threading.Thread] = None
+
     def start(self):
         """Start the bridge in a separate thread"""
         if self.running:
@@ -80,7 +81,7 @@ class MessageBridge:
             return
         
         self.running = True
-        self.bridge_thread = Thread(target=self._run_bridge, daemon=True)
+        self.bridge_thread = threading.Thread(target=self._run_bridge, daemon=True)
         self.bridge_thread.start()
         self.logger.info("Bridge started")
     
@@ -156,6 +157,113 @@ class MessageBridge:
             self.logger.info("Bridge thread ended")
 
 
+class HostProcess:
+    def __init__(self):
+
+        self.logger = Logger("host-process.log")
+
+        # Lists to store output
+        self.stdout_lines = []
+        self.stderr_lines = []
+
+        fw_path = os.path.abspath('/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/test_data/no_op/')
+        num_streams = 1
+
+        # Get the script path
+        script_dir = os.path.abspath('/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/runtime/ai_host/')
+        run_script_path = os.path.join(script_dir, "run.sh")
+
+        self.logger.info(f"Starting {run_script_path}...")
+
+        # Start the process
+        self.process = subprocess.Popen(
+            ["bash", run_script_path, fw_path, str(num_streams)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,  # Line buffered
+            universal_newlines=True,
+            preexec_fn=os.setsid  # Create a new process group
+        )
+
+        # Give the process a moment to start and check if it failed immediately
+        time.sleep(2)
+        if self.process.poll() is not None:
+            # Process has already exited, likely due to an error
+            try:
+                _, stderr = self.process.communicate(timeout=1)
+                error_msg = f"Process failed to start. Exit code: {self.process.returncode}"
+                if stderr:
+                    error_msg += f", stderr: {stderr.strip()}"
+                raise RuntimeError(error_msg)
+            except subprocess.TimeoutExpired:
+                raise RuntimeError("Process failed to start (timeout during error check)")
+        
+        
+        # Create threads to read stdout and stderr
+        self.stdout_thread = threading.Thread(
+            target=self._read_output_stream, 
+            args=(self.process.stdout, self.stdout_lines)
+        )
+        self.stderr_thread = threading.Thread(
+            target=self._read_output_stream, 
+            args=(self.process.stderr, self.stderr_lines)
+        )
+        
+        # Start the reader threads
+        self.stdout_thread.daemon = True
+        self.stderr_thread.daemon = True
+        self.stdout_thread.start()
+        self.stderr_thread.start()
+    
+    def __del__(self):
+        # Check if process is still running
+        if self.process.poll() is None:
+            self.logger.info("Terminating process...")
+            
+            # Send SIGINT (Ctrl+C) to the process group
+            os.killpg(os.getpgid(self.process.pid), signal.SIGINT)
+            
+            # Wait a bit for graceful shutdown
+            try:
+                self.process.wait(timeout=5)
+                self.logger.info("Process terminated gracefully.")
+            except subprocess.TimeoutExpired:
+                self.logger.warning("Process didn't terminate gracefully, forcing kill...")
+                os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
+                self.process.wait()
+                self.logger.warning("Process killed.")
+        else:
+            self.logger.warning("Process already exited.")
+        
+        if hasattr(self, 'stdout_thread'):
+            self.stdout_thread.join(timeout=2)
+        if hasattr(self, 'stderr_thread'):
+            self.stderr_thread.join(timeout=2)
+
+        if 0 != self.process.returncode:
+            self.logger.warning(f"Process exited with errors. Exit code: {self.process.returncode}")
+        else:
+            self.logger.info("Process exited successfully.")
+        
+        self.logger.info(f"Total stdout lines: {len(self.stdout_lines)}")
+        for stdout_line in self.stdout_lines:
+            self.logger.info(stdout_line)
+        self.logger.info(f"Total stderr lines: {len(self.stderr_lines)}")
+        for stderr_line in self.stderr_lines:
+            self.logger.info(stderr_line)
+
+    @staticmethod
+    def _read_output_stream(stream, output_list):
+        """Read from a stream and print in real-time."""
+        try:
+            for line in iter(stream.readline, ''):
+                if line:
+                    output_list.append(line)
+        except:
+            pass
+
+
 class TaskHandler:
     """Handles application tasks in a separate thread"""
     
@@ -163,7 +271,7 @@ class TaskHandler:
         self.bridge = bridge
         self.running = False
         self.logger = Logger("task-handler.log")
-        self.task_thread: Optional[Thread] = None
+        self.task_thread: Optional[threading.Thread] = None
 
     def start(self):
         """Start the task handler in a separate thread"""
@@ -172,7 +280,7 @@ class TaskHandler:
             return
         
         self.running = True
-        self.task_thread = Thread(target=self._run_tasks, daemon=True)
+        self.task_thread = threading.Thread(target=self._run_tasks, daemon=True)
         self.task_thread.start()
         self.logger.info("Task handler started")
     
@@ -265,6 +373,12 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
     
+    try:
+        host_process = HostProcess()
+    except Exception as e:
+        logger.error(f"Failed to start HostProcess: {e}")
+
+
     try:
         # Start both threads
         bridge.start()
