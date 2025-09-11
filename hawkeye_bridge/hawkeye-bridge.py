@@ -199,7 +199,14 @@ class TaskHandler:
                 if message:
                     self._handle_message(message)
                 
-                self._send_status()
+                # Send status every 3 seconds
+                status_interval = 3
+                if hasattr(self, '_last_status'):
+                    if time.time() - self._last_status > status_interval:
+                        self._send_status()
+                        self._last_status = time.time()
+                else:
+                    self._last_status = time.time()
                 
                 # Small delay
                 time.sleep(0.01)
@@ -219,26 +226,24 @@ class TaskHandler:
         self.bridge.push_message('ack', {'message_type' : message_type, 'message_content' : message_content})
 
     def _send_status(self):
-        """Send status every 3 seconds"""
-        status_interval = 3
-        if hasattr(self, '_last_status'):
-            if time.time() - self._last_status > status_interval:
-                try:
-                    host_info_struct: HostInfoStruct = get_host_info()
-                    status_message = {
-                        'iope_temperature': host_info_struct.iope_temperature,
-                        'sub_array_0_temperature': host_info_struct.sub_array_0_temperature,
-                        'sub_array_1_temperature': host_info_struct.sub_array_1_temperature,
-                        'sub_array_2_temperature': host_info_struct.sub_array_2_temperature,
-                        'sub_array_3_temperature': host_info_struct.sub_array_3_temperature
-                    }
-                    self.bridge.push_message('status', status_message)
-                except Exception as e:
-                    self.logger.warning(f"Unable to get host info: {e}")
-                finally:
-                    self._last_status = time.time()
-        else:
-            self._last_status = time.time()
+        """Send status messages periodically"""
+        try:
+            host_info_struct: HostInfoStruct = get_host_info()
+            temp_status = {
+                'iope_temperature': host_info_struct.iope_temperature,
+                'sub_array_0_temperature': host_info_struct.sub_array_0_temperature,
+                'sub_array_1_temperature': host_info_struct.sub_array_1_temperature,
+                'sub_array_2_temperature': host_info_struct.sub_array_2_temperature,
+                'sub_array_3_temperature': host_info_struct.sub_array_3_temperature
+            }
+        except Exception as e:
+            temp_status = {}
+            self.logger.warning(f"Unable to get host info: {e}")
+        
+        hw_status = {'temps': temp_status}
+        status_message = { 'hw' : hw_status }
+        
+        self.bridge.push_message('status', status_message)
 
 
 def main():
