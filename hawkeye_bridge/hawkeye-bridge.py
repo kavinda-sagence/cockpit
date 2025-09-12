@@ -4,7 +4,7 @@ import sys, os
 import signal
 import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, IO
 import threading
 import subprocess
 import queue
@@ -14,7 +14,30 @@ import select
 
 aix_endpoint_lib_path = os.path.abspath("/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/streamer/aix_endpoint")
 sys.path.append(aix_endpoint_lib_path)
-from aix_endpoint import HostInfoStruct, get_host_info, ai_out_mute, ai_warn_mute, ai_err_mute
+
+try:
+    from aix_endpoint import HostInfoStruct, get_host_info, ai_out_mute, ai_warn_mute, ai_err_mute
+except ImportError:
+    # Define stub types/functions for IntelliSense when module is not available
+    class HostInfoStruct:
+        def __init__(self):
+            self.iope_temperature: float = 0.0
+            self.sub_array_0_temperature: float = 0.0
+            self.sub_array_1_temperature: float = 0.0
+            self.sub_array_2_temperature: float = 0.0
+            self.sub_array_3_temperature: float = 0.0
+    
+    def get_host_info() -> HostInfoStruct:
+        return HostInfoStruct()
+    
+    def ai_out_mute() -> None:
+        pass
+    
+    def ai_warn_mute() -> None:
+        pass
+    
+    def ai_err_mute() -> None:
+        pass
 
 
 class Logger:
@@ -158,20 +181,16 @@ class MessageBridge:
 
 
 class HostProcess:
-    def __init__(self):
+    def __init__(self, host_path: str, fw_path: str, num_streams: int):
 
         self.logger = Logger("host-process.log")
 
-        # Lists to store output
-        self.stdout_lines = []
-        self.stderr_lines = []
-
-        fw_path = os.path.abspath('/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/test_data/no_op/')
-        num_streams = 1
+        # Queues to store output
+        self.stdout_lines: queue.Queue[str] = queue.Queue()
+        self.stderr_lines: queue.Queue[str] = queue.Queue()
 
         # Get the script path
-        script_dir = os.path.abspath('/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/runtime/ai_host/')
-        run_script_path = os.path.join(script_dir, "run.sh")
+        run_script_path = os.path.join(host_path, "run.sh")
 
         self.logger.info(f"Starting {run_script_path}...")
 
@@ -187,9 +206,9 @@ class HostProcess:
         )
 
         # Give the process a moment to start and check if it failed immediately
-        time.sleep(2)
+        time.sleep(5)
         if self.process.poll() is not None:
-            # Process has already exited, likely due to an error
+            # Process has already ended, likely due to an error
             try:
                 _, stderr = self.process.communicate(timeout=1)
                 error_msg = f"Process failed to start. Exit code: {self.process.returncode}"
@@ -203,16 +222,16 @@ class HostProcess:
         # Create threads to read stdout and stderr
         self.stdout_thread = threading.Thread(
             target=self._read_output_stream, 
-            args=(self.process.stdout, self.stdout_lines)
+            args=(self.process.stdout, self.stdout_lines), 
+            daemon=True
         )
         self.stderr_thread = threading.Thread(
             target=self._read_output_stream, 
-            args=(self.process.stderr, self.stderr_lines)
+            args=(self.process.stderr, self.stderr_lines), 
+            daemon=True
         )
         
         # Start the reader threads
-        self.stdout_thread.daemon = True
-        self.stderr_thread.daemon = True
         self.stdout_thread.start()
         self.stderr_thread.start()
     
@@ -234,7 +253,7 @@ class HostProcess:
                 self.process.wait()
                 self.logger.warning("Process killed.")
         else:
-            self.logger.warning("Process already exited.")
+            self.logger.warning("Process already stopped.")
         
         if hasattr(self, 'stdout_thread'):
             self.stdout_thread.join(timeout=2)
@@ -242,24 +261,61 @@ class HostProcess:
             self.stderr_thread.join(timeout=2)
 
         if 0 != self.process.returncode:
-            self.logger.warning(f"Process exited with errors. Exit code: {self.process.returncode}")
+            self.logger.warning(f"Process stopped with errors. Exit code: {self.process.returncode}")
         else:
-            self.logger.info("Process exited successfully.")
+            self.logger.info("Process stopped successfully.")
         
-        self.logger.info(f"Total stdout lines: {len(self.stdout_lines)}")
-        for stdout_line in self.stdout_lines:
+        # Convert queue to list to get size and iterate
+        stdout_list: list[str] = []
+        while not self.stdout_lines.empty():
+            try:
+                stdout_list.append(self.stdout_lines.get_nowait())
+            except queue.Empty:
+                break
+
+        stderr_list: list[str] = []
+        while not self.stderr_lines.empty():
+            try:
+                stderr_list.append(self.stderr_lines.get_nowait())
+            except queue.Empty:
+                break
+
+        self.logger.info(f"Remaining stdout lines: {len(stdout_list)}")
+        for stdout_line in stdout_list:
             self.logger.info(stdout_line)
-        self.logger.info(f"Total stderr lines: {len(self.stderr_lines)}")
-        for stderr_line in self.stderr_lines:
+        self.logger.info(f"Remaining stderr lines: {len(stderr_list)}")
+        for stderr_line in stderr_list:
             self.logger.info(stderr_line)
 
+    def IsAlive(self) -> bool:
+        """Check if the process is still running"""
+        return self.process.poll() is None
+
+    def pop_stdout(self) -> Optional[str]:
+        """Pop a line from stdout if available"""
+        try:
+            line = self.stdout_lines.get_nowait()
+            self.logger.info(f'Popped stdout: {line}')
+            return line
+        except queue.Empty:
+            return None
+    
+    def pop_stderr(self) -> Optional[str]:
+        """Pop a line from stderr if available"""
+        try:
+            line = self.stderr_lines.get_nowait()
+            self.logger.info(f'Popped stderr: {line}')
+            return line
+        except queue.Empty:
+            return None
+
     @staticmethod
-    def _read_output_stream(stream, output_list):
+    def _read_output_stream(stream: IO[str], output_list: queue.Queue[str]) -> None:
         """Read from a stream and print in real-time."""
         try:
             for line in iter(stream.readline, ''):
                 if line:
-                    output_list.append(line.rstrip())
+                    output_list.put(line.rstrip())
         except:
             pass
 
@@ -272,6 +328,25 @@ class TaskHandler:
         self.running = False
         self.logger = Logger("task-handler.log")
         self.task_thread: Optional[threading.Thread] = None
+        self.host_process = None
+
+    def start_host_process(self):
+        if self.host_process:
+            self.logger.warning("Host process is already running")
+            return
+
+        host_path = os.path.abspath('/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/runtime/ai_host/')
+        fw_path = os.path.abspath('/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/test_data/no_op/')
+        num_streams = 1
+        self.host_process = HostProcess(host_path, fw_path, num_streams)
+
+    def stop_host_process(self):
+        if not self.host_process:
+            self.logger.warning("Host process is not running")
+            return
+
+        del self.host_process
+        self.host_process = None
 
     def start(self):
         """Start the task handler in a separate thread"""
@@ -331,13 +406,21 @@ class TaskHandler:
 
         self.logger.info(f"Handling message: {message}")
 
+        if self.host_process is None:
+            self.start_host_process()
+        elif not self.host_process.IsAlive():
+            self.stop_host_process()
+            self.start_host_process()
+        else:
+            self.stop_host_process()
+
         self.bridge.push_message('ack', {'message_type' : message_type, 'message_content' : message_content})
 
     def _send_status(self):
         """Send status messages periodically"""
         try:
             host_info_struct: HostInfoStruct = get_host_info()
-            temp_status = {
+            temp_status: dict[str, float] = {
                 'iope_temperature': host_info_struct.iope_temperature,
                 'sub_array_0_temperature': host_info_struct.sub_array_0_temperature,
                 'sub_array_1_temperature': host_info_struct.sub_array_1_temperature,
@@ -347,10 +430,55 @@ class TaskHandler:
         except Exception as e:
             temp_status = {}
             self.logger.warning(f"Unable to get host info: {e}")
-        
+
         hw_status = {'temps': temp_status}
-        status_message = { 'hw' : hw_status }
+
+        max_lines = 100
+
+        # pop available stdout and stderr lines
+        stdout_lines: list[str] = []
+        stderr_lines: list[str] = []
         
+        while True:
+        
+            if self.host_process is None:
+                break
+            line = self.host_process.pop_stdout()
+        
+            if line is None or len(stdout_lines) >= max_lines:
+                break
+        
+            stdout_lines.append(line)
+
+        
+        while True:
+            if self.host_process is None:
+                break
+
+            line = self.host_process.pop_stderr()
+            
+            if line is None or len(stderr_lines) >= max_lines:
+                break
+            
+            stderr_lines.append(line)
+
+        if self.host_process is None:
+            host_status = {
+                'running': False,
+                'exit_code': None,
+                'stdout': stdout_lines,
+                'stderr': stderr_lines
+            }
+        else:
+            host_status = {
+                'running': self.host_process.process.poll() is None,
+                'exit_code': self.host_process.process.returncode,
+                'stdout': stdout_lines,
+                'stderr': stderr_lines
+            }
+
+        status_message = {'hw' : hw_status, 'host': host_status}
+
         self.bridge.push_message('status', status_message)
 
 
@@ -372,12 +500,6 @@ def main():
     # Register signal handlers
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-    
-    try:
-        host_process = HostProcess()
-    except Exception as e:
-        logger.error(f"Failed to start HostProcess: {e}")
-
 
     try:
         # Start both threads
