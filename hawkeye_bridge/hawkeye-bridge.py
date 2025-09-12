@@ -259,7 +259,7 @@ class HostProcess:
         try:
             for line in iter(stream.readline, ''):
                 if line:
-                    output_list.append(line)
+                    output_list.append(line.rstrip())
         except:
             pass
 
