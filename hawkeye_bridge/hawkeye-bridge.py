@@ -338,7 +338,15 @@ class TaskHandler:
         host_path = os.path.abspath('/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/runtime/ai_host/')
         fw_path = os.path.abspath('/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/test_data/no_op/')
         num_streams = 1
-        self.host_process = HostProcess(host_path, fw_path, num_streams)
+
+        # send notification to front-end
+        try:
+            self.host_process = HostProcess(host_path, fw_path, num_streams)
+        except Exception as e:
+            self.logger.error(f"Failed to start host process: {e}")
+            # send notification to front-end
+            self.host_process = None
+            return
 
     def stop_host_process(self):
         if not self.host_process:
@@ -409,6 +417,8 @@ class TaskHandler:
         if self.host_process is None:
             self.start_host_process()
         elif not self.host_process.IsAlive():
+            self.logger.error("Host process has stopped unexpectedly, restarting...")
+            # send notification to front-end
             self.stop_host_process()
             self.start_host_process()
         else:
