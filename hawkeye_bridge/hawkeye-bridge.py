@@ -2,42 +2,17 @@
 
 import sys, os
 import signal
+from typing import Dict, Any, Optional, IO
+from abc import ABC, abstractmethod
 import json
 import logging
-from typing import Dict, Any, Optional, IO
 import threading
 import subprocess
 import queue
 import time
 import select
-
-
-aix_endpoint_lib_path = os.path.abspath("/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/streamer/aix_endpoint")
-sys.path.append(aix_endpoint_lib_path)
-
-try:
-    from aix_endpoint import HostInfoStruct, get_host_info, ai_out_mute, ai_warn_mute, ai_err_mute
-except ImportError:
-    # Define stub types/functions for IntelliSense when module is not available
-    class HostInfoStruct:
-        def __init__(self):
-            self.iope_temperature: float = 0.0
-            self.sub_array_0_temperature: float = 0.0
-            self.sub_array_1_temperature: float = 0.0
-            self.sub_array_2_temperature: float = 0.0
-            self.sub_array_3_temperature: float = 0.0
-    
-    def get_host_info() -> HostInfoStruct:
-        return HostInfoStruct()
-    
-    def ai_out_mute() -> None:
-        pass
-    
-    def ai_warn_mute() -> None:
-        pass
-    
-    def ai_err_mute() -> None:
-        pass
+import numpy as np
+from aix_endpoint import AixEndpoint, HostInfoStruct, get_host_info, ai_out_mute, ai_warn_mute, ai_err_mute
 
 
 class Logger:
@@ -192,7 +167,7 @@ class HostProcess:
         # Get the script path
         run_script_path = os.path.join(host_path, "run.sh")
 
-        self.logger.info(f"Starting {run_script_path}...")
+        self.logger.info(f"Starting Host process...")
 
         # Start the process
         self.process = subprocess.Popen(
@@ -218,6 +193,7 @@ class HostProcess:
             except subprocess.TimeoutExpired:
                 raise RuntimeError("Process failed to start (timeout during error check)")
         
+        self.logger.info(f"Host process started.")
         
         # Create threads to read stdout and stderr
         self.stdout_thread = threading.Thread(
@@ -320,6 +296,127 @@ class HostProcess:
             pass
 
 
+class AixChannel(ABC):
+    def __init__(self, file_name: str, input_image_shape: tuple[tuple[int, int, int], ...]) -> None:
+        pass
+
+    @abstractmethod
+    def capture(self, q_val: float) -> tuple[bool, list[np.ndarray[np.int8, Any]]]:
+        pass
+
+    @abstractmethod
+    def show(self, inference: list[np.ndarray[np.float32, Any]]) -> None:
+        pass
+
+
+
+class AixChannelDummy(AixChannel):
+    def __init__(self, file_name: str, input_image_shape: tuple[tuple[int, int, int], ...], number_of_frames: int) -> None:
+
+        super().__init__(file_name, input_image_shape)
+
+
+        self.image_queue: queue.Queue[Any] = queue.Queue()
+        self.input_image_shape = input_image_shape
+        self.number_of_frames = number_of_frames
+        self.frames_transmitted = 0
+        self.frames_received = 0
+    
+    def capture(self, q_val: float) -> tuple[bool, list[np.ndarray[np.int8, Any]]]:
+
+        input_lst: list[np.ndarray[np.int8, Any]] = list()
+
+        if(self.frames_transmitted >= self.number_of_frames):
+            return False, input_lst
+
+        for shape in self.input_image_shape:
+            input_lst.append(((np.random.random(size=shape) * 255) - 128).astype(dtype=np.int8, order='C'))
+        
+        self.image_queue.put(input_lst)
+
+        self.frames_transmitted += 1
+
+        return True, input_lst
+    
+    def show(self, inference: list[np.ndarray[np.float32, Any]]) -> None:
+
+        _ = self.image_queue.get()
+            
+        self.frames_received += 1
+
+
+
+class Streamer():
+    def __init__(self, fw_path: str, stream_id: int):
+        self.logger = Logger("streamer.log")
+        self.stream_id = stream_id
+        self.input_image_shape = self._get_input_image_shape(fw_path)
+
+        self.logger.info(f"Initializing streamer {self.stream_id}...")
+        self.endpoint = AixEndpoint(self.stream_id, self.input_image_shape)
+        self.logger.info(f"Streamer {self.stream_id} initialized.")
+
+    def stream(self, channel: AixChannel):
+
+        q_val = 0.5
+        frames_transmitted = 0
+        frames_received = 0
+
+        endpoint = AixEndpoint(self.stream_id, self.input_image_shape)
+
+        while(endpoint.compute()):
+
+            if(endpoint.ready_to_set()):
+                stat, image = channel.capture(q_val)
+                if(stat):
+                    endpoint.set(image)
+                    frames_transmitted += 1
+                elif(frames_received == frames_transmitted):
+                    # If the video stream finished, -
+                    # wait for the results of the final transmitted frame to be received.
+                    break
+
+            if(endpoint.ready_to_get()):
+                inference = endpoint.get()
+                channel.show(inference)
+                frames_received += 1
+
+    def __del__(self):
+        self.logger.info(f"Destroying streamer {self.stream_id}...")
+        self.logger.info(f"Streamer {self.stream_id} destroyed.")
+    
+
+    @staticmethod
+    def _get_input_image_shape(test_dir_path: str) -> tuple[tuple[int, int, int], ...]:
+
+        test_config_file_path = os.path.join(test_dir_path, 'ai_fw', 'test_config.json')
+
+        # Open and read the JSON file
+        with open(test_config_file_path, 'r') as file:
+            data = json.load(file)
+
+        dest_ids: set[int] = set()
+
+        for output_layer_inf in data['outputs']:
+            dest_ids.add(output_layer_inf['dest_id'][0])
+
+        input_image_shape: list[tuple[int, int, int]] = list()
+
+        for input_layer_inf in data['inputs']:
+
+            if "inp_id" in input_layer_inf:
+                inp_id: int = input_layer_inf["inp_id"][0]
+                if(inp_id in dest_ids): continue
+
+            input_image_shape.append((
+                input_layer_inf['num_in_rows'], 
+                input_layer_inf['num_in_cols'], 
+                input_layer_inf['num_in_filters']
+            ))
+
+        return tuple(input_image_shape)
+
+
 class InfProcess:
     def __init__(self, host_path: str, fw_path: str, num_streams: int):
         """Initialize and start the host process and streamers"""
@@ -327,6 +424,12 @@ class InfProcess:
             self.host_process = HostProcess(host_path, fw_path, num_streams)
         except Exception as e:
             raise RuntimeError(f"Failed to start host process: {e}")
+
+        try:
+            self.streamers = [Streamer(fw_path, i) for i in range(num_streams)]
+        except Exception as e:
+            del self.host_process
+            raise RuntimeError(f"Failed to initialize streamers: {e}")
 
     def IsHostAlive(self) -> bool:
         """Check if the host process is still running"""
@@ -348,11 +451,14 @@ class InfProcess:
             line = self.host_process.pop_stderr()
             if line is None or len(stderr_lines) >= max_num_lines: break
             stderr_lines.append(line)
-        return {
-            'host': {
+        
+        host_status = {
                 'stdout': stdout_lines, 'stderr': stderr_lines, 'running': self.host_process.process.poll() is None,
                 'exit_code': self.host_process.process.returncode
-            }
+        }
+
+        return {
+            'host': host_status
         }
 
 
