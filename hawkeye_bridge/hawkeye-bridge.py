@@ -320,6 +320,42 @@ class HostProcess:
             pass
 
 
+class InfProcess:
+    def __init__(self, host_path: str, fw_path: str, num_streams: int):
+        """Initialize and start the host process and streamers"""
+        try:
+            self.host_process = HostProcess(host_path, fw_path, num_streams)
+        except Exception as e:
+            raise RuntimeError(f"Failed to start host process: {e}")
+
+    def IsHostAlive(self) -> bool:
+        """Check if the host process is still running"""
+        return self.host_process.IsAlive()
+
+    def get_logs(self) -> Dict[str, Any]:
+        """Get available logs from host process and streamers"""
+        max_num_lines = 100        
+    
+        stdout_lines: list[str] = []
+        stderr_lines: list[str] = []
+    
+        while True:
+            line = self.host_process.pop_stdout()
+            if line is None or len(stdout_lines) >= max_num_lines: break
+            stdout_lines.append(line)
+        
+        while True:
+            line = self.host_process.pop_stderr()
+            if line is None or len(stderr_lines) >= max_num_lines: break
+            stderr_lines.append(line)
+        return {
+            'host': {
+                'stdout': stdout_lines, 'stderr': stderr_lines, 'running': self.host_process.process.poll() is None,
+                'exit_code': self.host_process.process.returncode
+            }
+        }
+
+
 class TaskHandler:
     """Handles application tasks in a separate thread"""
     
@@ -328,11 +364,11 @@ class TaskHandler:
         self.running = False
         self.logger = Logger("task-handler.log")
         self.task_thread: Optional[threading.Thread] = None
-        self.host_process = None
+        self.inf_process = None
 
-    def start_host_process(self):
-        if self.host_process:
-            self.logger.warning("Host process is already running")
+    def start_inference(self):
+        if self.inf_process:
+            self.logger.warning("Inference process is already running")
             return
 
         host_path = os.path.abspath('/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/runtime/ai_host/')
@@ -341,20 +377,20 @@ class TaskHandler:
 
         # send notification to front-end
         try:
-            self.host_process = HostProcess(host_path, fw_path, num_streams)
+            self.inf_process = InfProcess(host_path, fw_path, num_streams)
         except Exception as e:
-            self.logger.error(f"Failed to start host process: {e}")
+            self.logger.error(f"Failed to start inference process: {e}")
             # send notification to front-end
-            self.host_process = None
+            self.inf_process = None
             return
 
-    def stop_host_process(self):
-        if not self.host_process:
-            self.logger.warning("Host process is not running")
+    def stop_inference(self):
+        if not self.inf_process:
+            self.logger.warning("Inference process is not running")
             return
 
-        del self.host_process
-        self.host_process = None
+        del self.inf_process
+        self.inf_process = None
 
     def start(self):
         """Start the task handler in a separate thread"""
@@ -414,20 +450,20 @@ class TaskHandler:
 
         self.logger.info(f"Handling message: {message}")
 
-        if self.host_process is None:
-            self.start_host_process()
-        elif not self.host_process.IsAlive():
+        if self.inf_process is None:
+            self.start_inference()
+        elif not self.inf_process.IsHostAlive():
             self.logger.error("Host process has stopped unexpectedly, restarting...")
             # send notification to front-end
-            self.stop_host_process()
-            self.start_host_process()
+            self.stop_inference()
+            self.start_inference()
         else:
-            self.stop_host_process()
+            self.stop_inference()
 
         self.bridge.push_message('ack', {'message_type' : message_type, 'message_content' : message_content})
 
-    def _send_status(self):
-        """Send status messages periodically"""
+    def _get_temps(self) -> Optional[Dict[str, float]]:
+        """Get temperature readings from host"""
         try:
             host_info_struct: HostInfoStruct = get_host_info()
             temp_status: dict[str, float] = {
@@ -437,57 +473,26 @@ class TaskHandler:
                 'sub_array_2_temperature': host_info_struct.sub_array_2_temperature,
                 'sub_array_3_temperature': host_info_struct.sub_array_3_temperature
             }
+            return temp_status
         except Exception as e:
-            temp_status = {}
             self.logger.warning(f"Unable to get host info: {e}")
+            return None
 
-        hw_status = {'temps': temp_status}
+    def _send_status(self):
+        """Send status messages periodically"""
 
-        max_lines = 100
-
-        # pop available stdout and stderr lines
-        stdout_lines: list[str] = []
-        stderr_lines: list[str] = []
-        
-        while True:
-        
-            if self.host_process is None:
-                break
-            line = self.host_process.pop_stdout()
-        
-            if line is None or len(stdout_lines) >= max_lines:
-                break
-        
-            stdout_lines.append(line)
-
-        
-        while True:
-            if self.host_process is None:
-                break
-
-            line = self.host_process.pop_stderr()
-            
-            if line is None or len(stderr_lines) >= max_lines:
-                break
-            
-            stderr_lines.append(line)
-
-        if self.host_process is None:
-            host_status = {
-                'running': False,
-                'exit_code': None,
-                'stdout': stdout_lines,
-                'stderr': stderr_lines
-            }
+        temp_status = self._get_temps()
+        if temp_status is not None:
+            hw_status = {'temps': temp_status}
         else:
-            host_status = {
-                'running': self.host_process.process.poll() is None,
-                'exit_code': self.host_process.process.returncode,
-                'stdout': stdout_lines,
-                'stderr': stderr_lines
-            }
+            hw_status = {}
 
-        status_message = {'hw' : hw_status, 'host': host_status}
+        if self.inf_process is None:
+            inf_process_status = {}
+        else:
+            inf_process_status = self.inf_process.get_logs()
+
+        status_message = {'hw' : hw_status, 'inf_pro': inf_process_status}
 
         self.bridge.push_message('status', status_message)
 
