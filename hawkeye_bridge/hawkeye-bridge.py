@@ -62,9 +62,10 @@ class MessageBridge:
     """Bridge that handles stdin/stdout in a separate thread"""
     
     def __init__(self):
+        self.logger = Logger("message-bridge.log")
+
         self.running = False
         self.shutdown_requested = False
-        self.logger = Logger("message-bridge.log")
         
         # Thread-safe queues for communication
         self.incoming_queue: queue.Queue[Dict[str, Any]] = queue.Queue()
@@ -159,6 +160,7 @@ class HostProcess:
     def __init__(self, host_path: str, fw_path: str, num_streams: int):
 
         self.logger = Logger("host-process.log")
+        self.logger.info(f"Starting Host process...")
 
         # Queues to store output
         self.stdout_lines: queue.Queue[str] = queue.Queue()
@@ -166,8 +168,6 @@ class HostProcess:
 
         # Get the script path
         run_script_path = os.path.join(host_path, "run.sh")
-
-        self.logger.info(f"Starting Host process...")
 
         # Start the process
         self.process = subprocess.Popen(
@@ -192,9 +192,7 @@ class HostProcess:
                 raise RuntimeError(error_msg)
             except subprocess.TimeoutExpired:
                 raise RuntimeError("Process failed to start (timeout during error check)")
-        
-        self.logger.info(f"Host process started.")
-        
+                
         # Create threads to read stdout and stderr
         self.stdout_thread = threading.Thread(
             target=self._read_output_stream, 
@@ -210,6 +208,9 @@ class HostProcess:
         # Start the reader threads
         self.stdout_thread.start()
         self.stderr_thread.start()
+
+        self.logger.info(f"Host process started.")
+
     
     def __del__(self):
         # Check if process is still running
@@ -296,6 +297,36 @@ class HostProcess:
             pass
 
 
+def get_input_image_shape(test_dir_path: str) -> tuple[tuple[int, int, int], ...]:
+
+    test_config_file_path = os.path.join(test_dir_path, 'ai_fw', 'test_config.json')
+
+    # Open and read the JSON file
+    with open(test_config_file_path, 'r') as file:
+        data = json.load(file)
+
+    dest_ids: set[int] = set()
+
+    for output_layer_inf in data['outputs']:
+        dest_ids.add(output_layer_inf['dest_id'][0])
+
+    input_image_shape: list[tuple[int, int, int]] = list()
+
+    for input_layer_inf in data['inputs']:
+
+        if "inp_id" in input_layer_inf:
+            inp_id: int = input_layer_inf["inp_id"][0]
+            if(inp_id in dest_ids): continue
+
+        input_image_shape.append((
+            input_layer_inf['num_in_rows'], 
+            input_layer_inf['num_in_cols'], 
+            input_layer_inf['num_in_filters']
+        ))
+
+    return tuple(input_image_shape)
+
+
 class AixChannel(ABC):
     def __init__(self, file_name: str, input_image_shape: tuple[tuple[int, int, int], ...]) -> None:
         pass
@@ -309,12 +340,10 @@ class AixChannel(ABC):
         pass
 
 
-
 class AixChannelDummy(AixChannel):
     def __init__(self, file_name: str, input_image_shape: tuple[tuple[int, int, int], ...], number_of_frames: int) -> None:
 
         super().__init__(file_name, input_image_shape)
-
 
         self.image_queue: queue.Queue[Any] = queue.Queue()
         self.input_image_shape = input_image_shape
@@ -345,91 +374,86 @@ class AixChannelDummy(AixChannel):
         self.frames_received += 1
 
 
-
 class Streamer():
-    def __init__(self, fw_path: str, stream_id: int):
-        self.logger = Logger("streamer.log")
-        self.stream_id = stream_id
-        self.input_image_shape = self._get_input_image_shape(fw_path)
+    def __init__(self, fw_path: str, stream_id: int, channel: AixChannel):
 
-        self.logger.info(f"Initializing streamer {self.stream_id}...")
+        self.logger = Logger(f"streamer_{stream_id}.log")
+        self.logger.info(f"Initializing streamer {stream_id}...")
+
+        self.input_image_shape = get_input_image_shape(fw_path)
+        self.stream_id = stream_id
+        self.channel = channel
+
         self.endpoint = AixEndpoint(self.stream_id, self.input_image_shape)
         self.logger.info(f"Streamer {self.stream_id} initialized.")
 
-    def stream(self, channel: AixChannel):
+        self.running = True
+        self.thread = threading.Thread(target=self._stream, daemon=True)
+        self.thread.start()
+
+        self.logger.info(f"Streamer {self.stream_id} initialized successfully.")
+
+    def __del__(self):
+        self.logger.info(f"Destroying streamer {self.stream_id}...")
+
+        self.running = False
+        self.thread.join(timeout=2)
+
+        self.logger.info(f"Streamer {self.stream_id} destroyed.")
+
+    def _stream(self):
 
         q_val = 0.5
         frames_transmitted = 0
         frames_received = 0
 
-        endpoint = AixEndpoint(self.stream_id, self.input_image_shape)
+        while self.endpoint.compute():
 
-        while(endpoint.compute()):
+            if self.running == False:
+                self.logger.info(f"Streamer {self.stream_id} loop break.")
+                break
 
-            if(endpoint.ready_to_set()):
-                stat, image = channel.capture(q_val)
-                if(stat):
-                    endpoint.set(image)
+            if self.endpoint.ready_to_set():
+                stat, image = self.channel.capture(q_val)
+                if stat:
+                    self.endpoint.set(image)
                     frames_transmitted += 1
                 elif(frames_received == frames_transmitted):
                     # If the video stream finished, -
                     # wait for the results of the final transmitted frame to be received.
                     break
 
-            if(endpoint.ready_to_get()):
-                inference = endpoint.get()
-                channel.show(inference)
+            if self.endpoint.ready_to_get():
+                inference = self.endpoint.get()
+                self.channel.show(inference)
                 frames_received += 1
-
-    def __del__(self):
-        self.logger.info(f"Destroying streamer {self.stream_id}...")
-        self.logger.info(f"Streamer {self.stream_id} destroyed.")
-    
-
-    @staticmethod
-    def _get_input_image_shape(test_dir_path: str) -> tuple[tuple[int, int, int], ...]:
-
-        test_config_file_path = os.path.join(test_dir_path, 'ai_fw', 'test_config.json')
-
-        # Open and read the JSON file
-        with open(test_config_file_path, 'r') as file:
-            data = json.load(file)
-
-        dest_ids: set[int] = set()
-
-        for output_layer_inf in data['outputs']:
-            dest_ids.add(output_layer_inf['dest_id'][0])
-
-        input_image_shape: list[tuple[int, int, int]] = list()
-
-        for input_layer_inf in data['inputs']:
-
-            if "inp_id" in input_layer_inf:
-                inp_id: int = input_layer_inf["inp_id"][0]
-                if(inp_id in dest_ids): continue
-
-            input_image_shape.append((
-                input_layer_inf['num_in_rows'], 
-                input_layer_inf['num_in_cols'], 
-                input_layer_inf['num_in_filters']
-            ))
-
-        return tuple(input_image_shape)
 
 
 class InfProcess:
     def __init__(self, host_path: str, fw_path: str, num_streams: int):
         """Initialize and start the host process and streamers"""
+        
+        self.logger = Logger("inf-process.log")
+        self.logger.info("Starting InfProcess...")
+        
         try:
             self.host_process = HostProcess(host_path, fw_path, num_streams)
         except Exception as e:
             raise RuntimeError(f"Failed to start host process: {e}")
 
         try:
-            self.streamers = [Streamer(fw_path, i) for i in range(num_streams)]
+            number_of_frames=100000000
+            self.channel = AixChannelDummy("", get_input_image_shape(fw_path), number_of_frames)
+            self.streamers = [Streamer(fw_path, i, self.channel) for i in range(num_streams)]
         except Exception as e:
             del self.host_process
             raise RuntimeError(f"Failed to initialize streamers: {e}")
+
+        self.logger.info("InfProcess started successfully.")
+
+
+    def __del__(self):
+        self.logger.info("InfProcess destroyed.")
 
     def IsHostAlive(self) -> bool:
         """Check if the host process is still running"""
@@ -466,9 +490,10 @@ class TaskHandler:
     """Handles application tasks in a separate thread"""
     
     def __init__(self, bridge: MessageBridge):
+        self.logger = Logger("task-handler.log")
+        
         self.bridge = bridge
         self.running = False
-        self.logger = Logger("task-handler.log")
         self.task_thread: Optional[threading.Thread] = None
         self.inf_process = None
 
@@ -504,10 +529,11 @@ class TaskHandler:
             self.logger.warning("Task handler is already running")
             return
         
+        self.logger.info("Task handler started")
+        
         self.running = True
         self.task_thread = threading.Thread(target=self._run_tasks, daemon=True)
         self.task_thread.start()
-        self.logger.info("Task handler started")
     
     def stop(self):
         """Stop the task handler"""
@@ -557,14 +583,19 @@ class TaskHandler:
         self.logger.info(f"Handling message: {message}")
 
         if self.inf_process is None:
+            self.logger.info("Starting inference process...")
             self.start_inference()
+            self.logger.info("Inference process started.")
         elif not self.inf_process.IsHostAlive():
             self.logger.error("Host process has stopped unexpectedly, restarting...")
             # send notification to front-end
             self.stop_inference()
             self.start_inference()
+            self.logger.info("Inference process restarted.")
         else:
+            self.logger.info("Stopping inference process...")
             self.stop_inference()
+            self.logger.info("Inference process stopped.")
 
         self.bridge.push_message('ack', {'message_type' : message_type, 'message_content' : message_content})
 
