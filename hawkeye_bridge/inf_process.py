@@ -296,7 +296,7 @@ class Streamer():
 
 
 class InfProcess:
-    def __init__(self, host_path: str, fw_path: str, num_streams: int):
+    def __init__(self, host_path: str, fw_path: str, num_streams: int, configs: Dict[str, Any]):
         """Initialize and start the host process and streamers"""
         
         self.logger = Logger("inf-process.log")
@@ -308,7 +308,7 @@ class InfProcess:
             raise RuntimeError(f"Failed to start host process: {e}")
 
         try:
-            number_of_frames=100000000
+            number_of_frames = configs.get('num_frames', 0)
             input_image_shape = get_input_image_shape(fw_path)
             self.channel = AixChannelDummy("", input_image_shape, number_of_frames)
             self.streamers = [Streamer(fw_path, i, self.channel) for i in range(num_streams)]

@@ -125,7 +125,7 @@ class TaskHandler:
         self.task_thread: Optional[threading.Thread] = None
         self.inf_process = None
 
-    def start_inference(self):
+    def start_inference(self, configs: Dict[str, Any]):
         if self.inf_process:
             self.logger.warning("Inference process is already running")
             return
@@ -136,7 +136,7 @@ class TaskHandler:
 
         # send notification to front-end
         try:
-            self.inf_process = InfProcess(host_path, fw_path, num_streams)
+            self.inf_process = InfProcess(host_path, fw_path, num_streams, configs)
         except Exception as e:
             self.logger.error(f"Failed to start inference process: {e}")
             # send notification to front-end
@@ -208,20 +208,33 @@ class TaskHandler:
 
         self.logger.info(f"Handling message: {message}")
 
-        if self.inf_process is None:
-            self.logger.info("Starting inference process...")
-            self.start_inference()
-            self.logger.info("Inference process started.")
-        elif not self.inf_process.IsHostAlive():
-            self.logger.error("Host process has stopped unexpectedly, restarting...")
-            # send notification to front-end
-            self.stop_inference()
-            self.start_inference()
-            self.logger.info("Inference process restarted.")
+        if 'command' == message_type:
+            command = message_content.get('command', '')
+            component = message_content.get('component', '')
+            configs = message_content.get('configs', {})
+            if 'inf_process' == component:
+                if command == 'start':
+                    if self.inf_process is None:
+                        self.logger.info("Starting inference process...")
+                        self.logger.info(f"Configs: {configs}")
+                        self.start_inference(configs)
+                        self.logger.info("Inference process started.")
+                    else:
+                        self.logger.warning("Inference process is already running")
+                elif command == 'stop':
+                    if self.inf_process is not None:
+                        self.logger.info("Stopping inference process...")
+                        self.stop_inference()
+                        self.logger.info("Inference process stopped.")
+                    else:
+                        self.logger.warning("Inference process is not running")
+                else:
+                    self.logger.warning(f"Unknown command: {command}")
+            else:
+                self.logger.warning(f"Unknown component: {component}")
+                return
         else:
-            self.logger.info("Stopping inference process...")
-            self.stop_inference()
-            self.logger.info("Inference process stopped.")
+            self.logger.warning(f"Unknown message type: {message_type}")
 
         self.bridge.push_message('ack', {'message_type' : message_type, 'message_content' : message_content})
 

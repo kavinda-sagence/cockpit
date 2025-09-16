@@ -1,4 +1,5 @@
 const { Timestamp } = require("@patternfly/react-core");
+const { Component } = require("react");
 
 (function() {
     "use strict";
@@ -186,10 +187,34 @@ const { Timestamp } = require("@patternfly/react-core");
         const hawkeye = new Hawkeye();
 
         // Add click handler if element exists
-        const sendButton = document.getElementById("send");
-        if (sendButton) {
-            sendButton.addEventListener("click", () => {
-                hawkeye.sendCommand('ping', {Timestamp: Date.now()});
+        const startButton = document.getElementById("start");
+        if (startButton) {
+            startButton.addEventListener("click", () => {
+                hawkeye.sendCommand(
+                    'command', 
+                    {
+                        Timestamp: Date.now(), 
+                        component: 'inf_process', 
+                        command: 'start', 
+                        configs: {
+                            num_frames: 1000
+                        }
+                    }
+                );
+            });
+        }
+
+        const stopButton = document.getElementById("stop");
+        if (stopButton) {
+            stopButton.addEventListener("click", () => {
+                hawkeye.sendCommand(
+                    'command', 
+                    {
+                        Timestamp: Date.now(), 
+                        component: 'inf_process', 
+                        command: 'stop', 
+                    }
+                );
             });
         }
 
