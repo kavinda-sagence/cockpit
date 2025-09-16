@@ -75,6 +75,8 @@ class MessageBridge:
 
     def start(self):
         """Start the bridge in a separate thread"""
+        self.logger.info("Starting bridge...")
+
         if self.running:
             self.logger.warning("Bridge is already running")
             return
@@ -86,6 +88,7 @@ class MessageBridge:
     
     def stop(self):
         """Stop the bridge"""
+        self.logger.info("Stopping bridge...")
         self.running = False
         if self.bridge_thread:
             self.bridge_thread.join(timeout=2)
@@ -328,8 +331,12 @@ def get_input_image_shape(test_dir_path: str) -> tuple[tuple[int, int, int], ...
 
 
 class AixChannel(ABC):
-    def __init__(self, file_name: str, input_image_shape: tuple[tuple[int, int, int], ...]) -> None:
-        pass
+    def __init__(self, file_name: str, input_image_shape: tuple[tuple[int, int, int], ...], number_of_frames: int) -> None:
+        self.file_name = file_name
+        self.input_image_shape = input_image_shape
+        self.number_of_frames = number_of_frames
+        self.frames_transmitted = 0
+        self.frames_received = 0
 
     @abstractmethod
     def capture(self, q_val: float) -> tuple[bool, list[np.ndarray[np.int8, Any]]]:
@@ -342,35 +349,21 @@ class AixChannel(ABC):
 
 class AixChannelDummy(AixChannel):
     def __init__(self, file_name: str, input_image_shape: tuple[tuple[int, int, int], ...], number_of_frames: int) -> None:
-
-        super().__init__(file_name, input_image_shape)
-
+        super().__init__(file_name, input_image_shape, number_of_frames)
         self.image_queue: queue.Queue[Any] = queue.Queue()
-        self.input_image_shape = input_image_shape
-        self.number_of_frames = number_of_frames
-        self.frames_transmitted = 0
-        self.frames_received = 0
     
     def capture(self, q_val: float) -> tuple[bool, list[np.ndarray[np.int8, Any]]]:
-
         input_lst: list[np.ndarray[np.int8, Any]] = list()
-
         if(self.frames_transmitted >= self.number_of_frames):
             return False, input_lst
-
         for shape in self.input_image_shape:
             input_lst.append(((np.random.random(size=shape) * 255) - 128).astype(dtype=np.int8, order='C'))
-        
         self.image_queue.put(input_lst)
-
         self.frames_transmitted += 1
-
         return True, input_lst
     
     def show(self, inference: list[np.ndarray[np.float32, Any]]) -> None:
-
         _ = self.image_queue.get()
-            
         self.frames_received += 1
 
 
@@ -384,8 +377,14 @@ class Streamer():
         self.stream_id = stream_id
         self.channel = channel
 
+        self.frames_transmitted = 0
+        self.frames_received = 0
+        self.num_frames = channel.number_of_frames
+
+        self.status_messages: queue.Queue[str] = queue.Queue()
+        self.error_messages: queue.Queue[str] = queue.Queue()
+
         self.endpoint = AixEndpoint(self.stream_id, self.input_image_shape)
-        self.logger.info(f"Streamer {self.stream_id} initialized.")
 
         self.running = True
         self.thread = threading.Thread(target=self._stream, daemon=True)
@@ -401,24 +400,35 @@ class Streamer():
 
         self.logger.info(f"Streamer {self.stream_id} destroyed.")
 
+    def pop_status_message(self) -> Optional[str]:
+        try:
+            return self.status_messages.get_nowait()
+        except queue.Empty:
+            return None
+    
+    def pop_error_message(self) -> Optional[str]:
+        try:
+            return self.error_messages.get_nowait()
+        except queue.Empty:
+            return None
+
     def _stream(self):
 
         q_val = 0.5
-        frames_transmitted = 0
-        frames_received = 0
+
+        self.status_messages.put(f"Frame streaming started.")
 
         while self.endpoint.compute():
 
-            if self.running == False:
-                self.logger.info(f"Streamer {self.stream_id} loop break.")
-                break
+            if self.running == False: break
 
             if self.endpoint.ready_to_set():
                 stat, image = self.channel.capture(q_val)
                 if stat:
                     self.endpoint.set(image)
-                    frames_transmitted += 1
-                elif(frames_received == frames_transmitted):
+                    self.frames_transmitted += 1
+                    # self.status_messages.put(f"Transmitted frame {frames_transmitted}")
+                elif(self.frames_received == self.frames_transmitted):
                     # If the video stream finished, -
                     # wait for the results of the final transmitted frame to be received.
                     break
@@ -426,7 +436,10 @@ class Streamer():
             if self.endpoint.ready_to_get():
                 inference = self.endpoint.get()
                 self.channel.show(inference)
-                frames_received += 1
+                self.frames_received += 1
+                # self.status_messages.put(f"Received frame {frames_received}")
+
+        self.status_messages.put(f"Frame streaming stopped.")
 
 
 class InfProcess:
@@ -443,7 +456,8 @@ class InfProcess:
 
         try:
             number_of_frames=100000000
-            self.channel = AixChannelDummy("", get_input_image_shape(fw_path), number_of_frames)
+            input_image_shape = get_input_image_shape(fw_path)
+            self.channel = AixChannelDummy("", input_image_shape, number_of_frames)
             self.streamers = [Streamer(fw_path, i, self.channel) for i in range(num_streams)]
         except Exception as e:
             del self.host_process
@@ -453,6 +467,7 @@ class InfProcess:
 
 
     def __del__(self):
+        self.logger.info("Destroying InfProcess...")
         self.logger.info("InfProcess destroyed.")
 
     def IsHostAlive(self) -> bool:
@@ -481,8 +496,34 @@ class InfProcess:
                 'exit_code': self.host_process.process.returncode
         }
 
+        streamer_status = {}
+
+        for streamer in self.streamers:
+            
+            status_msgs: list[str] = []
+            error_msgs: list[str] = []
+            
+            while True:
+                msg = streamer.pop_status_message()
+                if msg is None or len(status_msgs) >= max_num_lines: break
+                status_msgs.append(msg)
+            
+            while True:
+                msg = streamer.pop_error_message()
+                if msg is None or len(error_msgs) >= max_num_lines: break
+                error_msgs.append(msg)
+
+            streamer_status[str(streamer.stream_id)] = {
+                'num_frames': streamer.num_frames,
+                'frames_transmitted': streamer.frames_transmitted,
+                'frames_received': streamer.frames_received,
+                'status': status_msgs,
+                'errors': error_msgs
+            }
+
         return {
-            'host': host_status
+            'host': host_status,
+            'streamers': streamer_status
         }
 
 
@@ -549,9 +590,7 @@ class TaskHandler:
         try:
             while self.running:
                 # Check if bridge requested shutdown
-                if self.bridge.is_shutdown_requested():
-                    self.logger.info("Shutdown requested by bridge, stopping task handler")
-                    break
+                if self.bridge.is_shutdown_requested(): break
                 
                 # Process incoming messages
                 message = self.bridge.pop_message(timeout=0.1)
@@ -654,6 +693,8 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
 
     try:
+        logger.info("Starting bridge and task handler...")
+
         # Start both threads
         bridge.start()
         task_handler.start()
@@ -669,10 +710,11 @@ def main():
     except KeyboardInterrupt:
         logger.info("\nKeyboardInterrupt received, stopping...")
     finally:
+        logger.info("Stopping bridge and task handler...")
         # Stop both threads
         task_handler.stop()
         bridge.stop()
-        logger.info("Stopped.")
+        logger.info("Bridge and task handler stopped.")
         sys.exit(0)
 
 
