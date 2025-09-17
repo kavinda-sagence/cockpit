@@ -266,19 +266,17 @@ class TaskHandler:
     def _send_status(self):
         """Send status messages periodically"""
 
+        hw_status = {}
+        inf_process_status = {}
+
         temp_status = self._get_temps()
         if temp_status is not None:
             hw_status = {'temps': temp_status}
-        else:
-            hw_status = {}
 
-        if self.inf_process is None:
-            inf_process_status = {}
-        else:
+        if self.inf_process is not None:
             inf_process_status = self.inf_process.get_logs()
 
         status_message = {'hw' : hw_status, 'inf_pro': inf_process_status}
-
         self.message_bridge.push_message('status', status_message)
 
 
