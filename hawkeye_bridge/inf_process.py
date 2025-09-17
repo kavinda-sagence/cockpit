@@ -125,9 +125,7 @@ class HostProcess:
 
         if 0 != self.process.returncode:
             self.logger.warning(f"Process stopped with errors. Exit code: {self.process.returncode}")
-        else:
-            self.logger.info("Process stopped successfully.")
-        
+
         # Convert queue to list to get size and iterate
         stdout_list: list[str] = []
         while not self.stdout_lines.empty():
