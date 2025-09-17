@@ -12,36 +12,6 @@ from hawkeye_logger import Logger
 from aix_endpoint import AixEndpoint
 
 
-def get_input_image_shape(test_dir_path: str) -> tuple[tuple[int, int, int], ...]:
-
-    test_config_file_path = os.path.join(test_dir_path, 'ai_fw', 'test_config.json')
-
-    # Open and read the JSON file
-    with open(test_config_file_path, 'r') as file:
-        data = json.load(file)
-
-    dest_ids: set[int] = set()
-
-    for output_layer_inf in data['outputs']:
-        dest_ids.add(output_layer_inf['dest_id'][0])
-
-    input_image_shape: list[tuple[int, int, int]] = list()
-
-    for input_layer_inf in data['inputs']:
-
-        if "inp_id" in input_layer_inf:
-            inp_id: int = input_layer_inf["inp_id"][0]
-            if(inp_id in dest_ids): continue
-
-        input_image_shape.append((
-            input_layer_inf['num_in_rows'], 
-            input_layer_inf['num_in_cols'], 
-            input_layer_inf['num_in_filters']
-        ))
-
-    return tuple(input_image_shape)
-
-
 class HostProcess:
     def __init__(self, host_path: str, fw_path: str, num_streams: int):
 
@@ -190,7 +160,7 @@ class AixChannel(ABC):
         self.frames_received = 0
 
     @abstractmethod
-    def capture(self, q_val: float) -> tuple[bool, list[np.ndarray[np.int8, Any]]]:
+    def capture(self) -> tuple[bool, list[np.ndarray[np.int8, Any]]]:
         pass
 
     @abstractmethod
@@ -203,7 +173,7 @@ class AixChannelDummy(AixChannel):
         super().__init__(file_name, input_image_shape, number_of_frames)
         self.image_queue: queue.Queue[Any] = queue.Queue()
     
-    def capture(self, q_val: float) -> tuple[bool, list[np.ndarray[np.int8, Any]]]:
+    def capture(self) -> tuple[bool, list[np.ndarray[np.int8, Any]]]:
         input_lst: list[np.ndarray[np.int8, Any]] = list()
         if(self.frames_transmitted >= self.number_of_frames):
             return False, input_lst
@@ -219,12 +189,12 @@ class AixChannelDummy(AixChannel):
 
 
 class Streamer():
-    def __init__(self, fw_path: str, stream_id: int, channel: AixChannel):
+    def __init__(self, input_image_shape: tuple[tuple[int, int, int], ...], stream_id: int, channel: AixChannel):
 
         self.logger = Logger(f"streamer_{stream_id}.log")
         self.logger.info(f"Initializing streamer {stream_id}...")
 
-        self.input_image_shape = get_input_image_shape(fw_path)
+        self.input_image_shape = input_image_shape
         self.stream_id = stream_id
         self.channel = channel
 
@@ -242,6 +212,9 @@ class Streamer():
         self.thread.start()
 
         self.logger.info(f"Streamer {self.stream_id} initialized successfully.")
+
+    def is_alive(self) -> bool:
+        return self.thread.is_alive()
 
     def __del__(self):
         self.logger.info(f"Destroying streamer {self.stream_id}...")
@@ -264,33 +237,37 @@ class Streamer():
             return None
 
     def _stream(self):
+        try:
+            self.status_messages.put(f"Frame streaming started.")
 
-        q_val = 0.5
+            while True:
 
-        self.status_messages.put(f"Frame streaming started.")
+                if not self.endpoint.compute():
+                    raise RuntimeError("Endpoint compute failed")
 
-        while self.endpoint.compute():
+                if self.running == False: break
 
-            if self.running == False: break
+                if self.endpoint.ready_to_set():
+                    stat, image = self.channel.capture()
+                    if stat:
+                        self.endpoint.set(image)
+                        self.frames_transmitted += 1
+                        # self.status_messages.put(f"Transmitted frame {frames_transmitted}")
+                    elif(self.frames_received == self.frames_transmitted):
+                        # If the video stream finished, -
+                        # wait for the results of the final transmitted frame to be received.
+                        break
 
-            if self.endpoint.ready_to_set():
-                stat, image = self.channel.capture(q_val)
-                if stat:
-                    self.endpoint.set(image)
-                    self.frames_transmitted += 1
-                    # self.status_messages.put(f"Transmitted frame {frames_transmitted}")
-                elif(self.frames_received == self.frames_transmitted):
-                    # If the video stream finished, -
-                    # wait for the results of the final transmitted frame to be received.
-                    break
+                if self.endpoint.ready_to_get():
+                    inference = self.endpoint.get()
+                    self.channel.show(inference)
+                    self.frames_received += 1
+                    # self.status_messages.put(f"Received frame {frames_received}")
 
-            if self.endpoint.ready_to_get():
-                inference = self.endpoint.get()
-                self.channel.show(inference)
-                self.frames_received += 1
-                # self.status_messages.put(f"Received frame {frames_received}")
-
-        self.status_messages.put(f"Frame streaming stopped.")
+            self.status_messages.put(f"Frame streaming stopped.")
+        except Exception as e:
+            self.error_messages.put(str(e))
+            self.logger.error(str(e))
 
 
 class InfProcess:
@@ -307,9 +284,9 @@ class InfProcess:
 
         try:
             number_of_frames = configs.get('num_frames', 0)
-            input_image_shape = get_input_image_shape(fw_path)
+            input_image_shape = self._get_input_image_shape(fw_path)
             self.channel = AixChannelDummy("", input_image_shape, number_of_frames)
-            self.streamers = [Streamer(fw_path, i, self.channel) for i in range(num_streams)]
+            self.streamers = [Streamer(input_image_shape, i, self.channel) for i in range(num_streams)]
         except Exception as e:
             del self.host_process
             raise RuntimeError(f"Failed to initialize streamers: {e}")
@@ -365,6 +342,7 @@ class InfProcess:
                 error_msgs.append(msg)
 
             streamer_status[str(streamer.stream_id)] = {
+                'alive': streamer.is_alive(),
                 'num_frames': streamer.num_frames,
                 'frames_transmitted': streamer.frames_transmitted,
                 'frames_received': streamer.frames_received,
@@ -376,3 +354,33 @@ class InfProcess:
             'host': host_status,
             'streamers': streamer_status
         }
+
+    def _get_input_image_shape(self, test_dir_path: str) -> tuple[tuple[int, int, int], ...]:
+
+        test_config_file_path = os.path.join(test_dir_path, 'ai_fw', 'test_config.json')
+
+        # Open and read the JSON file
+        with open(test_config_file_path, 'r') as file:
+            data = json.load(file)
+
+        dest_ids: set[int] = set()
+
+        for output_layer_inf in data['outputs']:
+            dest_ids.add(output_layer_inf['dest_id'][0])
+
+        input_image_shape: list[tuple[int, int, int]] = list()
+
+        for input_layer_inf in data['inputs']:
+
+            if "inp_id" in input_layer_inf:
+                inp_id: int = input_layer_inf["inp_id"][0]
+                if(inp_id in dest_ids): continue
+
+            input_image_shape.append((
+                input_layer_inf['num_in_rows'], 
+                input_layer_inf['num_in_cols'], 
+                input_layer_inf['num_in_filters']
+            ))
+
+        return tuple(input_image_shape)
+
