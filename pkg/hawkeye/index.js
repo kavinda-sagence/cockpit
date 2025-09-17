@@ -99,8 +99,8 @@ const { Component } = require("react");
                 case 'status':
                     this.handleStatus(message.data);
                     break;
-                case 'error':
-                    this.handleError(message.data);
+                case 'ntf':
+                    this.handleNotification(message.data);
                     break;
                 case 'ack':
                     this.handleAck(message.data);
@@ -115,9 +115,18 @@ const { Component } = require("react");
             // Update UI status indicator here
         }
 
-        handleError(message) {
-            console.error("Bridge error:", message);
-            // Show error notification to user
+        handleNotification(message) {
+            // {'ntf' : {'warning': warn_msg}}
+            if (message.warning) {
+                console.warn("Bridge warning:", message.warning);
+            }
+            else if (message.error) {
+                console.error("Bridge error:", message.error);
+            }
+            else {
+                console.log("Notification:", message);
+            }
+            // Show notification to user
         }
 
         handleAck(message) {

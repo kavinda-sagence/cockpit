@@ -29,8 +29,8 @@ class MessageBridge:
         self.bridge_thread: Optional[threading.Thread] = None
 
     def start(self):
-        """Start the bridge in a separate thread"""
-        self.logger.info("Starting bridge...")
+        """Start the message bridge in a separate thread"""
+        self.logger.info("Starting message bridge...")
 
         if self.running:
             self.logger.warning("Bridge is already running")
@@ -42,8 +42,8 @@ class MessageBridge:
         self.logger.info("Bridge started")
     
     def stop(self):
-        """Stop the bridge"""
-        self.logger.info("Stopping bridge...")
+        """Stop the message bridge"""
+        self.logger.info("Stopping message bridge...")
         self.running = False
         if self.bridge_thread:
             self.bridge_thread.join(timeout=2)
@@ -66,7 +66,7 @@ class MessageBridge:
         return self.shutdown_requested
     
     def _run_bridge(self):
-        """Main bridge loop - runs in separate thread"""
+        """Main message bridge loop - runs in separate thread"""
         self.logger.info("Bridge thread started")
         
         try:
@@ -117,57 +117,74 @@ class MessageBridge:
 class TaskHandler:
     """Handles application tasks in a separate thread"""
     
-    def __init__(self, bridge: MessageBridge):
+    def __init__(self, message_bridge: MessageBridge):
         self.logger = Logger("task-handler.log")
         
-        self.bridge = bridge
+        self.message_bridge = message_bridge
         self.running = False
         self.task_thread: Optional[threading.Thread] = None
         self.inf_process = None
 
     def start_inference(self, configs: Dict[str, Any]):
+        self.logger.info("Starting inference process...")
+
         if self.inf_process:
-            self.logger.warning("Inference process is already running")
+            warn_msg = "Inference process is already running"
+            self.logger.warning(warn_msg)
+            self.message_bridge.push_message('ntf', {'warning': warn_msg})
             return
 
         host_path = os.path.abspath('/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/runtime/ai_host/')
         fw_path = os.path.abspath('/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/test_data/no_op/')
         num_streams = 1
 
-        # send notification to front-end
+        self.logger.info("Inference process started.")
+
         try:
             self.inf_process = InfProcess(host_path, fw_path, num_streams, configs)
         except Exception as e:
-            self.logger.error(f"Failed to start inference process: {e}")
-            # send notification to front-end
+            err_msg = f"Failed to start inference process: {e}"
+            self.logger.error(err_msg)
+            self.message_bridge.push_message('ntf', {'error': err_msg})
             self.inf_process = None
             return
 
     def stop_inference(self):
+        self.logger.info("Stopping inference process...")
+
         if not self.inf_process:
-            self.logger.warning("Inference process is not running")
+            warn_msg = "Inference process is not running"
+            self.logger.warning(warn_msg)
+            self.message_bridge.push_message('ntf', {'warning': warn_msg})
             return
 
         del self.inf_process
         self.inf_process = None
+        
+        self.logger.info("Inference process stopped.")
 
     def start(self):
         """Start the task handler in a separate thread"""
+        self.logger.info("Starting task handler...")
+        
         if self.running:
             self.logger.warning("Task handler is already running")
             return
-        
+
         self.logger.info("Task handler started")
-        
+
         self.running = True
         self.task_thread = threading.Thread(target=self._run_tasks, daemon=True)
         self.task_thread.start()
     
     def stop(self):
         """Stop the task handler"""
+        self.logger.info("Stopping task handler...")
+
         self.running = False
         if self.task_thread:
             self.task_thread.join(timeout=2)
+
         self.logger.info("Task handler stopped")
     
     def _run_tasks(self):
@@ -176,11 +193,11 @@ class TaskHandler:
         
         try:
             while self.running:
-                # Check if bridge requested shutdown
-                if self.bridge.is_shutdown_requested(): break
+                # Check if message bridge requested shutdown
+                if self.message_bridge.is_shutdown_requested(): break
                 
                 # Process incoming messages
-                message = self.bridge.pop_message(timeout=0.1)
+                message = self.message_bridge.pop_message(timeout=0.1)
                 if message:
                     self._handle_message(message)
                 
@@ -209,34 +226,26 @@ class TaskHandler:
         self.logger.info(f"Handling message: {message}")
 
         if 'command' == message_type:
+            
             command = message_content.get('command', '')
             component = message_content.get('component', '')
             configs = message_content.get('configs', {})
+            
             if 'inf_process' == component:
                 if command == 'start':
-                    if self.inf_process is None:
-                        self.logger.info("Starting inference process...")
-                        self.logger.info(f"Configs: {configs}")
-                        self.start_inference(configs)
-                        self.logger.info("Inference process started.")
-                    else:
-                        self.logger.warning("Inference process is already running")
+                    self.start_inference(configs)
                 elif command == 'stop':
-                    if self.inf_process is not None:
-                        self.logger.info("Stopping inference process...")
-                        self.stop_inference()
-                        self.logger.info("Inference process stopped.")
-                    else:
-                        self.logger.warning("Inference process is not running")
+                    self.stop_inference()
                 else:
                     self.logger.warning(f"Unknown command: {command}")
             else:
                 self.logger.warning(f"Unknown component: {component}")
                 return
+        
         else:
             self.logger.warning(f"Unknown message type: {message_type}")
 
-        self.bridge.push_message('ack', {'message_type' : message_type, 'message_content' : message_content})
+        self.message_bridge.push_message('ack', {'message_type' : message_type, 'message_content' : message_content})
 
     def _get_temps(self) -> Optional[Dict[str, float]]:
         """Get temperature readings from host"""
@@ -270,7 +279,7 @@ class TaskHandler:
 
         status_message = {'hw' : hw_status, 'inf_pro': inf_process_status}
 
-        self.bridge.push_message('status', status_message)
+        self.message_bridge.push_message('status', status_message)
 
 
 def main():
@@ -278,31 +287,31 @@ def main():
     ai_warn_mute() 
     ai_err_mute()
 
-    # Create bridge and task handler
+    # Create message bridge and task handler
     logger = Logger("main.log")
-    bridge = MessageBridge()
-    task_handler = TaskHandler(bridge)
+    message_bridge = MessageBridge()
+    task_handler = TaskHandler(message_bridge)
     
     # Signal handler for graceful shutdown
     def signal_handler(signum: int, frame: Any) -> None:
         logger.info(f"Received signal {signum}, shutting down...")
-        bridge.shutdown_requested = True
+        message_bridge.shutdown_requested = True
     
     # Register signal handlers
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
     try:
-        logger.info("Starting bridge and task handler...")
+        logger.info("Starting message bridge and task handler...")
 
         # Start both threads
-        bridge.start()
+        message_bridge.start()
         task_handler.start()
 
         logger.info("Bridge and task handler started.")
 
         # Keep main thread alive and check for shutdown requests
-        while not bridge.is_shutdown_requested():
+        while not message_bridge.is_shutdown_requested():
             time.sleep(0.1)
             
         logger.info("Shutdown requested, stopping...")
@@ -310,10 +319,10 @@ def main():
     except KeyboardInterrupt:
         logger.info("\nKeyboardInterrupt received, stopping...")
     finally:
-        logger.info("Stopping bridge and task handler...")
+        logger.info("Stopping message bridge and task handler...")
         # Stop both threads
         task_handler.stop()
-        bridge.stop()
+        message_bridge.stop()
         logger.info("Bridge and task handler stopped.")
         sys.exit(0)
 
