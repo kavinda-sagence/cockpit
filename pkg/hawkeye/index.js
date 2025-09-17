@@ -1,6 +1,3 @@
-const { Timestamp } = require("@patternfly/react-core");
-const { Component } = require("react");
-
 (function() {
     "use strict";
 
@@ -202,7 +199,6 @@ const { Component } = require("react");
                 hawkeye.sendCommand(
                     'command', 
                     {
-                        Timestamp: Date.now(), 
                         component: 'inf_process', 
                         command: 'start', 
                         configs: {
@@ -219,7 +215,6 @@ const { Component } = require("react");
                 hawkeye.sendCommand(
                     'command', 
                     {
-                        Timestamp: Date.now(), 
                         component: 'inf_process', 
                         command: 'stop', 
                     }

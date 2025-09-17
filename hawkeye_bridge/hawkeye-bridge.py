@@ -245,7 +245,7 @@ class TaskHandler:
         else:
             self.logger.warning(f"Unknown message type: {message_type}")
 
-        self.message_bridge.push_message('ack', {'message_type' : message_type, 'message_content' : message_content})
+        self.message_bridge.push_message('ack', {message_type : message_content})
 
     def _get_temps(self) -> Optional[Dict[str, float]]:
         """Get temperature readings from host"""
