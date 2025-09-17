@@ -306,7 +306,7 @@ def main():
         message_bridge.start()
         task_handler.start()
 
-        logger.info("Bridge and task handler started.")
+        logger.info("Message bridge and task handler started.")
 
         # Keep main thread alive and check for shutdown requests
         while not message_bridge.is_shutdown_requested():
@@ -321,7 +321,7 @@ def main():
         # Stop both threads
         task_handler.stop()
         message_bridge.stop()
-        logger.info("Bridge and task handler stopped.")
+        logger.info("Message bridge and task handler stopped.")
         sys.exit(0)
 
 
