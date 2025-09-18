@@ -201,8 +201,22 @@
                     {
                         component: 'inf_process', 
                         command: 'start', 
-                        configs: {
-                            num_frames: 1000
+                        configs: 
+                        {
+                            test_dir_path: '/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/test_data/no_op/', 
+                            streams: 
+                            [
+                                {
+                                    id: 0, 
+                                    src: { type: 'rand_gen', configs: {'number_of_frames': 123} }, 
+                                    dest: {type: 'no_op'}
+                                }, 
+                                {
+                                    id: 1, 
+                                    src: { type: 'rand_gen', configs: {'number_of_frames': 456} }, 
+                                    dest: {type: 'no_op'}
+                                }
+                            ]
                         }
                     }
                 );

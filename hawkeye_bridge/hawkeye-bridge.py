@@ -12,7 +12,6 @@ from hawkeye_logger import Logger
 from inf_process import InfProcess
 from aix_endpoint import HostInfoStruct, get_host_info, ai_out_mute, ai_warn_mute, ai_err_mute
 
-
 class MessageBridge:
     """Bridge that handles stdin/stdout in a separate thread"""
     
@@ -135,13 +134,11 @@ class TaskHandler:
             return
 
         host_path = os.path.abspath('/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/runtime/ai_host/')
-        fw_path = os.path.abspath('/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/test_data/no_op/')
-        num_streams = 1
 
         self.logger.info("Inference process started.")
 
         try:
-            self.inf_process = InfProcess(host_path, fw_path, num_streams, configs)
+            self.inf_process = InfProcess(host_path, configs)
         except Exception as e:
             err_msg = f"Failed to start inference process: {e}"
             self.logger.error(err_msg)
@@ -245,7 +242,7 @@ class TaskHandler:
         else:
             self.logger.warning(f"Unknown message type: {message_type}")
 
-        self.message_bridge.push_message('ack', {message_type : message_content})
+        self.message_bridge.push_message('ack', None)
 
     def _get_temps(self) -> Optional[Dict[str, float]]:
         """Get temperature readings from host"""

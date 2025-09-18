@@ -2,18 +2,17 @@ import os
 import signal
 import time
 from typing import Dict, Any, Optional, IO
-from abc import ABC, abstractmethod
 import queue
 import json
 import threading
 import subprocess
-import numpy as np
 from hawkeye_logger import Logger
+import inf_channels 
 from aix_endpoint import AixEndpoint
 
 
 class HostProcess:
-    def __init__(self, host_path: str, fw_path: str, num_streams: int):
+    def __init__(self, host_path: str, test_dir_path: str, num_streams: int):
 
         self.logger = Logger("host-process.log")
         self.logger.info(f"Starting Host process...")
@@ -27,7 +26,7 @@ class HostProcess:
 
         # Start the process
         self.process = subprocess.Popen(
-            ["bash", run_script_path, fw_path, str(num_streams)],
+            ["bash", run_script_path, test_dir_path, str(num_streams)],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -151,56 +150,23 @@ class HostProcess:
             pass
 
 
-class AixChannel(ABC):
-    def __init__(self, file_name: str, input_image_shape: tuple[tuple[int, int, int], ...], number_of_frames: int) -> None:
-        self.file_name = file_name
-        self.input_image_shape = input_image_shape
-        self.number_of_frames = number_of_frames
-        self.frames_transmitted = 0
-        self.frames_received = 0
-
-    @abstractmethod
-    def capture(self) -> tuple[bool, list[np.ndarray[np.int8, Any]]]:
-        pass
-
-    @abstractmethod
-    def show(self, inference: list[np.ndarray[np.float32, Any]]) -> None:
-        pass
-
-
-class AixChannelDummy(AixChannel):
-    def __init__(self, file_name: str, input_image_shape: tuple[tuple[int, int, int], ...], number_of_frames: int) -> None:
-        super().__init__(file_name, input_image_shape, number_of_frames)
-        self.image_queue: queue.Queue[Any] = queue.Queue()
-    
-    def capture(self) -> tuple[bool, list[np.ndarray[np.int8, Any]]]:
-        input_lst: list[np.ndarray[np.int8, Any]] = list()
-        if(self.frames_transmitted >= self.number_of_frames):
-            return False, input_lst
-        for shape in self.input_image_shape:
-            input_lst.append(((np.random.random(size=shape) * 255) - 128).astype(dtype=np.int8, order='C'))
-        self.image_queue.put(input_lst)
-        self.frames_transmitted += 1
-        return True, input_lst
-    
-    def show(self, inference: list[np.ndarray[np.float32, Any]]) -> None:
-        _ = self.image_queue.get()
-        self.frames_received += 1
-
-
 class Streamer():
-    def __init__(self, input_image_shape: tuple[tuple[int, int, int], ...], stream_id: int, channel: AixChannel):
+    def __init__(self, 
+                 stream_id: int, 
+                 input_image_shape: tuple[tuple[int, int, int], ...], 
+                 src_channel: inf_channels.SrcChannel, 
+                 dest_channel: inf_channels.DestChannel):
 
         self.logger = Logger(f"streamer_{stream_id}.log")
         self.logger.info(f"Initializing streamer {stream_id}...")
 
         self.input_image_shape = input_image_shape
         self.stream_id = stream_id
-        self.channel = channel
+        self.src_channel = src_channel
+        self.dest_channel = dest_channel
 
         self.frames_transmitted = 0
         self.frames_received = 0
-        self.num_frames = channel.number_of_frames
 
         self.status_messages: queue.Queue[str] = queue.Queue()
         self.error_messages: queue.Queue[str] = queue.Queue()
@@ -248,7 +214,7 @@ class Streamer():
                 if self.running == False: break
 
                 if self.endpoint.ready_to_set():
-                    stat, image = self.channel.capture()
+                    stat, image = self.src_channel.capture()
                     if stat:
                         self.endpoint.set(image)
                         self.frames_transmitted += 1
@@ -260,7 +226,7 @@ class Streamer():
 
                 if self.endpoint.ready_to_get():
                     inference = self.endpoint.get()
-                    self.channel.show(inference)
+                    self.dest_channel.show(inference)
                     self.frames_received += 1
                     # self.status_messages.put(f"Received frame {frames_received}")
 
@@ -271,28 +237,83 @@ class Streamer():
 
 
 class InfProcess:
-    def __init__(self, host_path: str, fw_path: str, num_streams: int, configs: Dict[str, Any]):
+    def __init__(self, host_path: str, configs: Dict[str, Any]):
         """Initialize and start the host process and streamers"""
         
         self.logger = Logger("inf-process.log")
         self.logger.info("Starting InfProcess...")
-        
+
+        self.streamers: list[Streamer] = []
+
+        # Validate test directory path
+        test_dir_path = configs.get('test_dir_path', None)
+        if test_dir_path is None:
+            raise ValueError("Test directory path not specified in inference configuration")
+        test_dir_path = os.path.abspath(test_dir_path)
+
+        # Get input image shape from test configuration
+        input_image_shape = self._get_input_image_shape(test_dir_path)
+
+        streams = configs.get('streams', [])
+        num_streams = len(streams)
+
+        channels_list: list[tuple[inf_channels.SrcChannel, inf_channels.DestChannel]] = []
+
         try:
-            self.host_process = HostProcess(host_path, fw_path, num_streams)
+            for i, stream in enumerate(streams):
+
+                # Check for stream ID consistency
+                stream_id = stream.get('id', None)
+                if stream_id != i:
+                    raise ValueError(f"Stream ID mismatch. Expected {i}, got {stream_id}")
+
+                # Validate source channel configuration
+                src_channel_data = stream.get('src', None)
+                if src_channel_data is None:
+                    raise ValueError(f"Source channel not found for stream {i}")
+
+                # Validate destination channel configuration
+                dest_channel_data = stream.get('dest', None)
+                if dest_channel_data is None:
+                    raise ValueError(f"Destination channel not found for stream {i}")
+
+                # Get channel types
+                src_channel_type = src_channel_data.get('type', None)
+                dest_channel_type = dest_channel_data.get('type', None)
+
+                # Create source channel
+                src_channel_configs = src_channel_data.get('configs', {})
+                if src_channel_type == 'rand_gen':
+                    src_channel_configs['input_image_shape'] = input_image_shape
+                    src_channel = inf_channels.RandGenChannel(src_channel_configs)
+                else:
+                    raise ValueError(f"Unsupported source channel type: {src_channel_type}")
+
+                # Create destination channel
+                dest_channel_configs = dest_channel_data.get('configs', {})
+                if dest_channel_type == 'no_op':
+                    dest_channel = inf_channels.NoOpChannel(dest_channel_configs, src_channel)
+                else:
+                    raise ValueError(f"Unsupported destination channel type: {dest_channel_type}")
+
+                channels_pair = (src_channel, dest_channel)
+                channels_list.append(channels_pair)
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize channels: {e}")
+
+        try:
+            self.host_process = HostProcess(host_path, test_dir_path, num_streams)
         except Exception as e:
             raise RuntimeError(f"Failed to start host process: {e}")
 
         try:
-            number_of_frames = configs.get('num_frames', 0)
-            input_image_shape = self._get_input_image_shape(fw_path)
-            self.channel = AixChannelDummy("", input_image_shape, number_of_frames)
-            self.streamers = [Streamer(input_image_shape, i, self.channel) for i in range(num_streams)]
+            for i, (src_channel, dest_channel) in enumerate(channels_list):
+                self.streamers.append(Streamer(i, input_image_shape, src_channel, dest_channel))
         except Exception as e:
             del self.host_process
             raise RuntimeError(f"Failed to initialize streamers: {e}")
 
         self.logger.info("InfProcess started successfully.")
-
 
     def __del__(self):
         self.logger.info("Destroying InfProcess...")
@@ -330,6 +351,8 @@ class InfProcess:
             
             status_msgs: list[str] = []
             error_msgs: list[str] = []
+
+            # TODO : add messages to channel classes and get from there too
             
             while True:
                 msg = streamer.pop_status_message()
@@ -343,7 +366,7 @@ class InfProcess:
 
             streamer_status[str(streamer.stream_id)] = {
                 'alive': streamer.is_alive(),
-                'num_frames': streamer.num_frames,
+                'num_frames': streamer.src_channel.number_of_frames,
                 'frames_transmitted': streamer.frames_transmitted,
                 'frames_received': streamer.frames_received,
                 'status': status_msgs,
@@ -383,4 +406,3 @@ class InfProcess:
             ))
 
         return tuple(input_image_shape)
-

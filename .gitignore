@@ -65,6 +65,7 @@ Makefile.in
 /tsconfig.tsbuildinfo
 /version.m4
 /wsinstance-start
+/.vscode
 
 # subdirs (/subdir/...)
 /doc/guide/html
