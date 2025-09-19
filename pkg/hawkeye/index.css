@@ -1,0 +1,42 @@
+body { font-family: sans-serif; margin: 16px; }
+h1 { font-size: 20px; margin: 0 0 12px; }
+#config-panel label { display: block; font-weight: 600; }
+#streams { border: 1px solid #ccc; padding: 8px; background: #fafafa; }
+.stream-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; padding: 4px; border: 1px solid #ddd; background: #fff; }
+.stream-row input[type=number] { width: 90px; }
+.stream-row button.remove { background: #eee; border: 1px solid #bbb; cursor: pointer; }
+button { cursor: pointer; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+#messages { min-height: 18px; }
+
+/* Utility spacing classes (was inline styles) */
+.mt-8 { margin-top: 8px; }
+.mt-10 { margin-top: 10px; }
+.mt-12 { margin-top: 12px; }
+
+/* Message inline styling */
+.msg-inline { font-family: monospace; }
+.msg-error { color: #c00; }
+.msg-ok { color: #060; }
+
+/* Status area */
+#status-area { margin-top: 24px; display: grid; gap: 16px; grid-template-columns: 1fr; }
+@media (min-width: 900px) { #status-area { grid-template-columns: 1fr 1fr; } }
+.status-block { border: 1px solid #ccc; background: #fefefe; padding: 10px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.status-block-header { font-weight: 700; margin: 0 0 6px; font-size: 14px; letter-spacing: 0.5px; text-transform: uppercase; }
+.messages-pair { display: flex; gap: 12px; margin-top: 8px; }
+.msg-group { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.msg-group-title { font-size: 12px; font-weight: 600; letter-spacing: 0.5px; color: #555; margin-bottom: 4px; }
+.msg-list { list-style: none; margin: 0; padding: 4px 6px; border: 1px solid #ddd; background: #fafafa; font-family: monospace; font-size: 12px; line-height: 1.3; max-height: 180px; overflow-y: auto; }
+.msg-list li { padding: 1px 0; white-space: pre-wrap; word-break: break-word; }
+.msg-list li.error { color: #900; }
+.msg-list li.warn { color: #b57a00; }
+.streamer-card { border: 1px solid #ddd; padding: 6px 8px; margin-bottom: 10px; background: #fff; border-radius: 3px; font-size: 12px; }
+.streamer-header { display: flex; flex-wrap: wrap; gap: 8px; font-weight: 600; margin-bottom: 4px; }
+.badges { display: flex; gap: 4px; }
+.badge { background: #eee; border: 1px solid #ccc; padding: 1px 4px; border-radius: 2px; font-size: 10px; letter-spacing: 0.5px; }
+.badge.alive-true { background: #d1f7d1; border-color: #8cc98c; }
+.badge.alive-false { background: #f9d6d6; border-color: #dd7b7b; }
+.pair-cols { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.pair-cols .col { flex: 1; min-width: 220px; }
+.empty-hint { font-size: 11px; color: #777; font-style: italic; }

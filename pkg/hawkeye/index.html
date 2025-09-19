@@ -9,9 +9,48 @@
     <script src="index.js"></script>
 </head>
 <body>
-    <div>
-        <button id="start">START</button>
-        <button id="stop">STOP</button>
+    <h1>Hawkeye</h1>
+    <div id="config-panel">
+        <label>Test Dir Path:
+            <input type="text" id="test-dir" size="80" placeholder="/path/to/test_dir/" />
+        </label>
+        <div class="mt-8">
+            <button id="add-stream">Add Streamer</button>
+            <button id="clear-streams">Clear All</button>
+        </div>
+        <div id="streams" class="mt-10"></div>
+        <div class="mt-12">
+            <button id="start">START</button>
+            <button id="stop">STOP</button>
+        </div>
+        <div id="messages" class="mt-10 msg-inline msg-error"></div>
     </div>
+        <div id="status-area">
+            <h2>Status</h2>
+            <div id="hw-status" class="status-block">
+                <div class="status-block-header">Hardware</div>
+                <div class="msg-group-title">Temperatures</div>
+                <ul id="hw-temps" class="msg-list"></ul>
+            </div>
+            <div id="host-status" class="status-block">
+                <div class="status-block-header">Host Process</div>
+                <div class="kv"><span class="k">Running:</span> <span class="v" id="host-running">-</span></div>
+                <div class="kv"><span class="k">Exit Code:</span> <span class="v" id="host-exit-code">-</span></div>
+                <div class="messages-pair">
+                    <div class="msg-group">
+                        <div class="msg-group-title">STDOUT</div>
+                        <ul id="host-stdout" class="msg-list"></ul>
+                    </div>
+                    <div class="msg-group">
+                        <div class="msg-group-title">STDERR</div>
+                        <ul id="host-stderr" class="msg-list"></ul>
+                    </div>
+                </div>
+            </div>
+            <div id="streamers-status" class="status-block">
+                <div class="status-block-header">Streamers</div>
+                <div id="streamers-container"></div>
+            </div>
+        </div>
 </body>
 </html>
