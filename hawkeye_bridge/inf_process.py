@@ -7,7 +7,8 @@ import json
 import threading
 import subprocess
 from hawkeye_logger import Logger
-import inf_channels 
+from message_handler import MessageQueueHandler
+import inf_channels
 from aix_endpoint import AixEndpoint
 
 
@@ -150,26 +151,22 @@ class HostProcess:
             pass
 
 
-class Streamer():
+class Streamer(MessageQueueHandler):
     def __init__(self, 
                  stream_id: int, 
                  input_image_shape: tuple[tuple[int, int, int], ...], 
                  src_channel: inf_channels.SrcChannel, 
                  dest_channel: inf_channels.DestChannel):
-
-        self.logger = Logger(f"streamer_{stream_id}.log")
+        
+        self.logger = Logger(f"streamer-{stream_id}.log")
         self.logger.info(f"Initializing streamer {stream_id}...")
+
+        super().__init__(self.logger)
 
         self.input_image_shape = input_image_shape
         self.stream_id = stream_id
         self.src_channel = src_channel
         self.dest_channel = dest_channel
-
-        self.frames_transmitted = 0
-        self.frames_received = 0
-
-        self.status_messages: queue.Queue[str] = queue.Queue()
-        self.error_messages: queue.Queue[str] = queue.Queue()
 
         self.endpoint = AixEndpoint(self.stream_id, self.input_image_shape)
 
@@ -190,21 +187,12 @@ class Streamer():
 
         self.logger.info(f"Streamer {self.stream_id} destroyed.")
 
-    def pop_status_message(self) -> Optional[str]:
-        try:
-            return self.status_messages.get_nowait()
-        except queue.Empty:
-            return None
-    
-    def pop_error_message(self) -> Optional[str]:
-        try:
-            return self.error_messages.get_nowait()
-        except queue.Empty:
-            return None
-
     def _stream(self):
         try:
-            self.status_messages.put(f"Frame streaming started.")
+            self.put_status_message(f"Frame streaming started.")
+
+            frames_transmitted = 0
+            frames_received = 0
 
             while True:
 
@@ -217,9 +205,9 @@ class Streamer():
                     stat, image = self.src_channel.capture()
                     if stat:
                         self.endpoint.set(image)
-                        self.frames_transmitted += 1
+                        frames_transmitted += 1
                         # self.status_messages.put(f"Transmitted frame {frames_transmitted}")
-                    elif(self.frames_received == self.frames_transmitted):
+                    elif(frames_received == frames_transmitted):
                         # If the video stream finished, -
                         # wait for the results of the final transmitted frame to be received.
                         break
@@ -227,12 +215,12 @@ class Streamer():
                 if self.endpoint.ready_to_get():
                     inference = self.endpoint.get()
                     self.dest_channel.show(inference)
-                    self.frames_received += 1
+                    frames_received += 1
                     # self.status_messages.put(f"Received frame {frames_received}")
 
-            self.status_messages.put(f"Frame streaming stopped.")
+            self.put_status_message(f"Frame streaming stopped.")
         except Exception as e:
-            self.error_messages.put(str(e))
+            self.put_error_message(str(e))
             self.logger.error(str(e))
 
 
@@ -285,14 +273,14 @@ class InfProcess:
                 src_channel_configs = src_channel_data.get('configs', {})
                 if src_channel_type == 'rand_gen':
                     src_channel_configs['input_image_shape'] = input_image_shape
-                    src_channel = inf_channels.RandGenChannel(src_channel_configs)
+                    src_channel = inf_channels.RandGenChannel(stream_id, src_channel_configs)
                 else:
                     raise ValueError(f"Unsupported source channel type: {src_channel_type}")
 
                 # Create destination channel
                 dest_channel_configs = dest_channel_data.get('configs', {})
                 if dest_channel_type == 'no_op':
-                    dest_channel = inf_channels.NoOpChannel(dest_channel_configs, src_channel)
+                    dest_channel = inf_channels.NoOpChannel(stream_id, dest_channel_configs, src_channel)
                 else:
                     raise ValueError(f"Unsupported destination channel type: {dest_channel_type}")
 
@@ -341,36 +329,31 @@ class InfProcess:
             stderr_lines.append(line)
         
         host_status = {
-                'stdout': stdout_lines, 'stderr': stderr_lines, 'running': self.host_process.process.poll() is None,
-                'exit_code': self.host_process.process.returncode
+            'stdout': stdout_lines, 
+            'stderr': stderr_lines, 
+            'running': self.host_process.process.poll() is None, 
+            'exit_code': self.host_process.process.returncode
         }
 
         streamer_status = {}
 
         for streamer in self.streamers:
-            
-            status_msgs: list[str] = []
-            error_msgs: list[str] = []
 
-            # TODO : add messages to channel classes and get from there too
-            
-            while True:
-                msg = streamer.pop_status_message()
-                if msg is None or len(status_msgs) >= max_num_lines: break
-                status_msgs.append(msg)
-            
-            while True:
-                msg = streamer.pop_error_message()
-                if msg is None or len(error_msgs) >= max_num_lines: break
-                error_msgs.append(msg)
+            streamer_status_msgs, streamer_error_msgs = streamer.get_messages(max_num_lines)
+            src_channel_status_msgs, src_channel_error_msgs = streamer.src_channel.get_messages(max_num_lines)
+            dest_channel_status_msgs, dest_channel_error_msgs = streamer.dest_channel.get_messages(max_num_lines)
 
             streamer_status[str(streamer.stream_id)] = {
                 'alive': streamer.is_alive(),
                 'num_frames': streamer.src_channel.number_of_frames,
-                'frames_transmitted': streamer.frames_transmitted,
-                'frames_received': streamer.frames_received,
-                'status': status_msgs,
-                'errors': error_msgs
+                'frames_transmitted': streamer.src_channel.frames_transmitted,
+                'frames_received': streamer.dest_channel.frames_received,
+                'streamer_status_msgs': streamer_status_msgs,
+                'streamer_error_msgs': streamer_error_msgs, 
+                'src_channel_status_msgs': src_channel_status_msgs,
+                'src_channel_error_msgs': src_channel_error_msgs,
+                'dest_channel_status_msgs': dest_channel_status_msgs,
+                'dest_channel_error_msgs': dest_channel_error_msgs
             }
 
         return {
@@ -378,7 +361,8 @@ class InfProcess:
             'streamers': streamer_status
         }
 
-    def _get_input_image_shape(self, test_dir_path: str) -> tuple[tuple[int, int, int], ...]:
+    @staticmethod
+    def _get_input_image_shape(test_dir_path: str) -> tuple[tuple[int, int, int], ...]:
 
         test_config_file_path = os.path.join(test_dir_path, 'ai_fw', 'test_config.json')
 
