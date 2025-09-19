@@ -178,17 +178,23 @@
         cockpit.transport.wait(() => {
             const hawkeye = new Hawkeye();
 
-            // Channel config schemas (extendable)
-            /** @type {Record<string,{role:'src'|'dest',fields:{name:string,label:string,type:'number'|'text',min?:number,placeholder?:string,default?:any,required?:boolean}[]}>} */
+            // Channel config schemas (extendable for future components)
+            /** @type {Record<string,{role:'src'|'dest',name:string,description:string,icon:string,fields:{name:string,label:string,type:'number'|'text',min?:number,placeholder?:string,default?:any,required?:boolean}[]}>} */
             const CHANNEL_CONFIG_SCHEMAS = {
                 rand_gen: {
                     role: 'src',
+                    name: 'Random Generator',
+                    description: 'Generates random data frames for testing',
+                    icon: '🎲',
                     fields: [
-                        { name: 'number_of_frames', label: 'Frames', type: 'number', min: 1, default: 100, required: true }
+                        { name: 'number_of_frames', label: 'Number of Frames', type: 'number', min: 1, default: 100, required: true, placeholder: 'e.g., 100' }
                     ]
                 },
                 no_op: {
                     role: 'dest',
+                    name: 'No Operation',
+                    description: 'Receives data without processing',
+                    icon: '📪',
                     fields: []
                 }
             };
@@ -259,23 +265,49 @@
                 const row = document.createElement("div");
                 row.className = "stream-row";
                 row.dataset.streamId = String(id);
+                
+                // Get available components for each role
+                const srcComponents = Object.entries(CHANNEL_CONFIG_SCHEMAS).filter(([, schema]) => schema.role === 'src');
+                const destComponents = Object.entries(CHANNEL_CONFIG_SCHEMAS).filter(([, schema]) => schema.role === 'dest');
+                
                 row.innerHTML = `
-                    <span>#${id}</span>
-                    <label>Src
-                        <select class="src-type">
-                            <option value="rand_gen" selected>rand_gen</option>
-                        </select>
-                    </label>
-                    <div class="src-configs cfg-block"></div>
-                    <label>Dest
-                        <select class="dest-type">
-                            <option value="no_op" selected>no_op</option>
-                        </select>
-                    </label>
-                    <div class="dest-configs cfg-block"></div>
-                    <button type="button" class="remove">X</button>
+                    <div class="stream-header">
+                        <div class="stream-id">Streamer ${id}</div>
+                        <button type="button" class="stream-remove" aria-label="Remove streamer ${id}">Remove</button>
+                    </div>
+                    <div class="stream-channels">
+                        <div class="channel-group">
+                            <div class="channel-header">
+                                <div class="channel-icon src"></div>
+                                <div class="channel-title">Source Channel</div>
+                            </div>
+                            <div class="channel-select">
+                                <select class="src-type form-select" aria-label="Select source component">
+                                    ${srcComponents.map(([key, schema]) => 
+                                        `<option value="${key}">${schema.icon} ${schema.name}</option>`
+                                    ).join('')}
+                                </select>
+                            </div>
+                            <div class="src-configs channel-configs"></div>
+                        </div>
+                        <div class="channel-group">
+                            <div class="channel-header">
+                                <div class="channel-icon dest"></div>
+                                <div class="channel-title">Destination Channel</div>
+                            </div>
+                            <div class="channel-select">
+                                <select class="dest-type form-select" aria-label="Select destination component">
+                                    ${destComponents.map(([key, schema]) => 
+                                        `<option value="${key}">${schema.icon} ${schema.name}</option>`
+                                    ).join('')}
+                                </select>
+                            </div>
+                            <div class="dest-configs channel-configs"></div>
+                        </div>
+                    </div>
                 `;
-                /** @type {HTMLButtonElement|null} */ const removeBtn = row.querySelector("button.remove");
+                
+                /** @type {HTMLButtonElement|null} */ const removeBtn = row.querySelector(".stream-remove");
                 if (removeBtn) {
                     removeBtn.addEventListener("click", () => {
                         row.remove();
@@ -291,19 +323,53 @@
                     const sel = row.querySelector(role === 'src' ? 'select.src-type' : 'select.dest-type');
                     const container = row.querySelector(role === 'src' ? '.src-configs' : '.dest-configs');
                     if (!sel || !container) return;
+                    
                     const type = /** @type {HTMLSelectElement} */(sel).value;
                     const schema = CHANNEL_CONFIG_SCHEMAS[type];
                     container.innerHTML = '';
-                    if (!schema || schema.role !== role || !schema.fields.length) return;
+                    
+                    if (!schema || schema.role !== role) return;
+                    
+                    // Add component description
+                    if (schema.description) {
+                        const desc = document.createElement('div');
+                        desc.className = 'component-description';
+                        desc.style.cssText = 'font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--spacing-sm); font-style: italic;';
+                        desc.textContent = schema.description;
+                        container.appendChild(desc);
+                    }
+                    
+                    if (!schema.fields.length) {
+                        const hint = document.createElement('div');
+                        hint.className = 'empty-hint';
+                        hint.textContent = 'No configuration required';
+                        container.appendChild(hint);
+                        return;
+                    }
+                    
                     schema.fields.forEach(f => {
-                        const wrap = document.createElement('label');
+                        const wrap = document.createElement('div');
+                        wrap.className = 'config-field-group';
                         wrap.dataset.field = f.name;
+                        
                         let attrs = '';
                         if (f.type === 'number') {
                             if (f.min != null) attrs += ` min="${f.min}"`;
                         }
+                        if (f.placeholder) attrs += ` placeholder="${f.placeholder}"`;
+                        if (f.required) attrs += ` required`;
+                        
                         const defVal = f.default != null ? f.default : '';
-                        wrap.innerHTML = `${f.label} <input type="${f.type}" class="cfg-field" data-name="${f.name}" value="${defVal}"${attrs} />`;
+                        wrap.innerHTML = `
+                            <label for="cfg-${id}-${role}-${f.name}">${f.label}${f.required ? ' *' : ''}</label>
+                            <input 
+                                type="${f.type}" 
+                                id="cfg-${id}-${role}-${f.name}"
+                                class="cfg-field form-input form-input-sm" 
+                                data-name="${f.name}" 
+                                value="${defVal}"${attrs} 
+                            />
+                        `;
                         container.appendChild(wrap);
                     });
                 }
@@ -322,10 +388,15 @@
                 if (!streamsContainer) return;
                 const rows = streamsContainer.querySelectorAll(".stream-row");
                 rows.forEach((el, idx) => {
+                    const newId = idx; // Start from 0
                     const row = /** @type {HTMLElement} */ (el);
-                    row.dataset.streamId = String(idx);
-                    const span = row.querySelector("span");
-                    if (span) span.textContent = `#${idx}`;
+                    row.dataset.streamId = String(newId);
+                    const streamIdEl = row.querySelector('.stream-id');
+                    if (streamIdEl) streamIdEl.textContent = `Streamer ${newId}`;
+                    
+                    // Update aria-labels for remove buttons
+                    const removeBtn = row.querySelector('.stream-remove');
+                    if (removeBtn) removeBtn.setAttribute('aria-label', `Remove streamer ${newId}`);
                 });
             }
 
@@ -442,6 +513,10 @@
             /** @param {any} statusData */
             function updateStatusUI(statusData) {
                 if (!statusData || typeof statusData !== "object") return;
+                
+                // Preserve main page scroll position during updates
+                const mainScrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+                
                 // Hardware temps
                 (function renderHwTemps(){
                     if (!hwTempsEl) return;
@@ -451,24 +526,26 @@
                     const atBottom = (hwTempsEl.scrollTop + hwTempsEl.clientHeight) >= (hwTempsEl.scrollHeight - 4);
                     hwTempsEl.innerHTML = "";
                     if (!keys.length) {
-                        const li = document.createElement("li");
-                        li.className = "empty-hint";
-                        li.textContent = "(no temps)";
-                        hwTempsEl.appendChild(li);
-                        if (atBottom) hwTempsEl.scrollTop = hwTempsEl.scrollHeight;
-                        return;
+                        return; // Let CSS handle empty state
                     }
                     keys.sort();
                     keys.forEach(k => {
                         const li = document.createElement("li");
-                        li.textContent = `${k}: ${temps[k]}`;
+                        const value = temps[k];
+                        const formattedValue = typeof value === 'number' ? `${value.toFixed(2)}°C` : String(value);
+                        li.innerHTML = `
+                            <span class="temp-name">${k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                            <span class="temp-value">${formattedValue}</span>
+                        `;
                         hwTempsEl.appendChild(li);
                     });
                     if (atBottom) hwTempsEl.scrollTop = hwTempsEl.scrollHeight;
                 })();
+                
                 const infPro = statusData.inf_pro || {};
                 const hostPresent = Object.prototype.hasOwnProperty.call(infPro, "host");
                 const host = hostPresent ? (infPro.host || {}) : {};
+                
                 // Merge host info & append new stdout/stderr lines
                 if (!hostPresent) {
                     // Inference process section disappeared => treat as stopped
@@ -483,9 +560,35 @@
                 if (Array.isArray(host.stderr)) {
                     host.stderr.forEach((/** @type {any} */ l) => { const line = String(l); if (!logStore.host.stderr.includes(line)) logStore.host.stderr.push(line); });
                 }
-                if (hostRunningEl) hostRunningEl.textContent = logStore.host.running == null ? "-" : String(!!logStore.host.running);
-                if (hostExitCodeEl) hostExitCodeEl.textContent = logStore.host.exit_code == null ? "-" : String(logStore.host.exit_code);
-                // Helper to populate list
+                
+                // Update host status with modern indicators
+                if (hostRunningEl) {
+                    hostRunningEl.innerHTML = '';
+                    const statusEl = document.createElement('span');
+                    if (logStore.host.running === true) {
+                        statusEl.className = 'status-indicator running';
+                        statusEl.textContent = 'Running';
+                    } else if (logStore.host.running === false) {
+                        statusEl.className = 'status-indicator stopped';
+                        statusEl.textContent = 'Stopped';
+                    } else {
+                        statusEl.className = 'status-indicator pending';
+                        statusEl.textContent = 'Pending';
+                    }
+                    hostRunningEl.appendChild(statusEl);
+                }
+                
+                if (hostExitCodeEl) {
+                    const exitCode = logStore.host.exit_code;
+                    if (exitCode === null) {
+                        hostExitCodeEl.textContent = '-';
+                        hostExitCodeEl.className = 'v';
+                    } else {
+                        hostExitCodeEl.textContent = String(exitCode);
+                        hostExitCodeEl.className = exitCode === 0 ? 'v' : 'v error';
+                    }
+                }
+                // Helper to populate list with better styling
                 /**
                  * @param {HTMLElement|null} container
                  * @param {any} arr
@@ -496,10 +599,7 @@
                     const atBottom = (container.scrollTop + container.clientHeight) >= (container.scrollHeight - 4);
                     container.innerHTML = "";
                     if (!Array.isArray(arr) || !arr.length) {
-                        const li = document.createElement("li");
-                        li.className = "empty-hint";
-                        li.textContent = "(empty)";
-                        container.appendChild(li);
+                        // Let CSS handle empty state with ::before pseudo-element
                         if (atBottom) container.scrollTop = container.scrollHeight;
                         return;
                     }
@@ -567,10 +667,8 @@
                     streamersContainerEl.innerHTML = "";
                     const keys = Object.keys(logStore.streamers).sort((a,b)=>parseInt(a,10)-parseInt(b,10));
                     if (!keys.length) {
-                        const div = document.createElement("div");
-                        div.className = "empty-hint";
-                        div.textContent = "No streamer data";
-                        streamersContainerEl.appendChild(div);
+                        // Let CSS handle empty state
+                        return;
                     } else {
                         keys.forEach(k => {
                             const sObj = logStore.streamers[k] || {};
@@ -580,33 +678,78 @@
                             const framesTx = sObj.frames_transmitted ?? "-";
                             const framesRx = sObj.frames_received ?? "-";
                             const numFrames = sObj.num_frames ?? "-";
+                            
+                            // Calculate progress percentage
+                            const framesTxNum = typeof framesTx === 'number' ? framesTx : (framesTx !== "-" ? parseInt(String(framesTx), 10) : 0);
+                            const numFramesNum = typeof numFrames === 'number' ? numFrames : (numFrames !== "-" ? parseInt(String(numFrames), 10) : 0);
+                            const progress = numFramesNum > 0 && !isNaN(framesTxNum) && !isNaN(numFramesNum)
+                                ? Math.round((framesTxNum / numFramesNum) * 100) 
+                                : 0;
+                            
                             card.innerHTML = `
                                 <div class="streamer-header">
-                                    <div>Streamer #${k}</div>
+                                    <div class="streamer-id">🔄 Streamer #${k}</div>
                                     <div class="badges">
-                                        <span class="badge alive-${alive}">${alive ? "ALIVE" : "DONE"}</span>
-                                        <span class="badge">Frames ${framesTx}/${numFrames} TX</span>
-                                        <span class="badge">RX ${framesRx}</span>
+                                        <span class="badge alive-${alive}">${alive ? "🟢 ACTIVE" : "🔴 DONE"}</span>
+                                        <span class="badge">� ${framesTx}/${numFrames} (${progress}%)</span>
+                                        <span class="badge">📥 Received: ${framesRx}</span>
                                     </div>
                                 </div>
-                                <div class="pair-cols">
-                                    <div class="col">
-                                        <div class="msg-group-title">Streamer Status</div>
-                                        <ul class="msg-list streamer-status"></ul>
-                                        <div class="msg-group-title">Streamer Errors</div>
-                                        <ul class="msg-list streamer-errors"></ul>
+                                
+                                <!-- Streamer Logs -->
+                                <div class="component-logs">
+                                    <div class="log-title collapsible" data-target="streamer-logs-${k}">
+                                        📋 Streamer Logs <span class="collapse-icon">▼</span>
                                     </div>
-                                    <div class="col">
-                                        <div class="msg-group-title">Src Channel Status</div>
-                                        <ul class="msg-list src-status"></ul>
-                                        <div class="msg-group-title">Src Channel Errors</div>
-                                        <ul class="msg-list src-errors"></ul>
+                                    <div class="collapsible-content" id="streamer-logs-${k}">
+                                        <div class="messages-pair">
+                                            <div class="msg-group">
+                                                <div class="msg-group-title">⚙️ Status Messages</div>
+                                                <ul class="msg-list streamer-status"></ul>
+                                            </div>
+                                            <div class="msg-group">
+                                                <div class="msg-group-title">❌ Error Messages</div>
+                                                <ul class="msg-list streamer-errors"></ul>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="col">
-                                        <div class="msg-group-title">Dest Channel Status</div>
-                                        <ul class="msg-list dest-status"></ul>
-                                        <div class="msg-group-title">Dest Channel Errors</div>
-                                        <ul class="msg-list dest-errors"></ul>
+                                </div>
+
+                                <!-- Source Channel Component -->
+                                <div class="channel-component">
+                                    <div class="channel-component-header src collapsible" data-target="src-channel-${k}">
+                                        <span>📤</span> Source Channel <span class="collapse-icon">▼</span>
+                                    </div>
+                                    <div class="channel-component-content collapsible-content" id="src-channel-${k}">
+                                        <div class="channel-logs">
+                                            <div class="msg-group">
+                                                <div class="msg-group-title">� Status</div>
+                                                <ul class="msg-list src-status"></ul>
+                                            </div>
+                                            <div class="msg-group">
+                                                <div class="msg-group-title">⚠️ Errors</div>
+                                                <ul class="msg-list src-errors"></ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Destination Channel Component -->
+                                <div class="channel-component">
+                                    <div class="channel-component-header dest collapsible" data-target="dest-channel-${k}">
+                                        <span>📥</span> Destination Channel <span class="collapse-icon">▼</span>
+                                    </div>
+                                    <div class="channel-component-content collapsible-content" id="dest-channel-${k}">
+                                        <div class="channel-logs">
+                                            <div class="msg-group">
+                                                <div class="msg-group-title">📝 Status</div>
+                                                <ul class="msg-list dest-status"></ul>
+                                            </div>
+                                            <div class="msg-group">
+                                                <div class="msg-group-title">⚠️ Errors</div>
+                                                <ul class="msg-list dest-errors"></ul>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             `;
@@ -618,6 +761,22 @@
                             fillList(card.querySelector(".src-errors"), sObj.src_channel_error_msgs, true);
                             fillList(card.querySelector(".dest-status"), sObj.dest_channel_status_msgs, false);
                             fillList(card.querySelector(".dest-errors"), sObj.dest_channel_error_msgs, true);
+                            
+                            // Add collapsible functionality
+                            card.querySelectorAll('.collapsible').forEach(header => {
+                                header.addEventListener('click', function(/** @type {Event} */ event) {
+                                    const clickedHeader = /** @type {HTMLElement} */ (event.currentTarget);
+                                    const targetId = clickedHeader.getAttribute('data-target');
+                                    if (!targetId) return;
+                                    const content = document.getElementById(targetId);
+                                    const icon = clickedHeader.querySelector('.collapse-icon');
+                                    
+                                    if (content && icon) {
+                                        content.classList.toggle('collapsed');
+                                        icon.textContent = content.classList.contains('collapsed') ? '▶' : '▼';
+                                    }
+                                });
+                            });
                         });
                     }
                 }
