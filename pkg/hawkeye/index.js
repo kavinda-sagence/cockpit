@@ -20,7 +20,7 @@
 
             connect() {
                 try {
-                    const hawkeyeBridgePath = "/home/kavinda/Desktop/MySpace/code/cockpit/hawkeye_bridge/";
+                    const hawkeyeBridgePath = "/home/analog/kavinda/cockpit/hawkeye_bridge/";
                     const hawkeyeBridgeScript = "hawkeye-bridge.sh";
                     this.channel = cockpit.channel({
                         payload: "stream",

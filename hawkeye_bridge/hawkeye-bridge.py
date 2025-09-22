@@ -133,7 +133,7 @@ class TaskHandler:
             self.message_bridge.push_message('ntf', {'warning': warn_msg})
             return
 
-        host_path = os.path.abspath('/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/out_runtime_test_app/aix/bin/deb64-x86_64/release/runtime/ai_host/')
+        host_path = os.path.abspath('/home/analog/kavinda/sg_sw/sw_be/out_sw_be/aix/bin/deb64-x86_64/release/runtime/ai_host/')
 
         self.logger.info("Inference process started.")
 
