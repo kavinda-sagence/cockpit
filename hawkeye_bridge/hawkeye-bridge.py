@@ -198,8 +198,8 @@ class TaskHandler:
                 if message:
                     self._handle_message(message)
                 
-                # Send status every 3 seconds
-                status_interval = 3
+                # Send status every second
+                status_interval = 1
                 if hasattr(self, '_last_status'):
                     if time.time() - self._last_status > status_interval:
                         self._send_status()
