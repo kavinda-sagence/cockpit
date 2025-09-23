@@ -143,8 +143,38 @@ class ImageWriterChannel(DestChannel):
     def show(self, inference: list[np.ndarray[np.float32, Any]]) -> None:
         _ = self.image_queue.get()
 
-        output_file = f"{self.output_path}frame_{self.frames_received}.png"
-        cv2.imwrite(output_file, inference[0])
+        for i, arr in enumerate(inference):
+            output_file = f"{self.output_path}frame_{self.frames_received}_{i}.png"
+            cv2.imwrite(output_file, arr)
 
         self.frames_received += 1
-        self.put_status_message(f"Frame {self.frames_received} written to {output_file}")
+        self.put_status_message(f"Frame {self.frames_received} written to {self.output_path}")
+
+
+class TxtWriterChannel(DestChannel):
+    def __init__(self, stream_id: int, configs: dict[str, Any], src_channel: SrcChannel) -> None:
+        super().__init__(stream_id, configs, src_channel)
+
+        self.output_path: str = configs['output_path']
+        if not self.output_path.endswith('/'):
+            self.output_path += '/'
+        
+        if not os.path.exists(self.output_path):
+            os.makedirs(self.output_path)
+            self.put_status_message(f"Output directory created: {self.output_path}")
+        else:
+            self.put_status_message(f"Output directory exists: {self.output_path}")
+
+    def show(self, inference: list[np.ndarray[np.float32, Any]]) -> None:
+        _ = self.image_queue.get()
+
+        for i, arr in enumerate(inference):
+            output_file = f"{self.output_path}frame_{self.frames_received}_{i}.txt"
+            with open(output_file, 'w') as f:
+                arr_2d = arr.reshape(arr.shape[0], -1)
+                for row in arr_2d:
+                    f.write(' '.join(map(str, row)))
+                    f.write('\n')
+
+        self.frames_received += 1
+        self.put_status_message(f"Frame {self.frames_received} written to {self.output_path}")

@@ -284,8 +284,10 @@ class InfProcess:
                 dest_channel_configs = dest_channel_data.get('configs', {})
                 if dest_channel_type == 'no_op':
                     dest_channel = inf_channels.NoOpChannel(stream_id, dest_channel_configs, src_channel)
-                elif dest_channel_type == 'img_write':
+                elif dest_channel_type == 'img_writer':
                     dest_channel = inf_channels.ImageWriterChannel(stream_id, dest_channel_configs, src_channel)
+                elif dest_channel_type == 'txt_writer':
+                    dest_channel = inf_channels.TxtWriterChannel(stream_id, dest_channel_configs, src_channel)
                 else:
                     raise ValueError(f"Unsupported destination channel type: {dest_channel_type}")
 

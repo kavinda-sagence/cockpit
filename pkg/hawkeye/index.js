@@ -207,11 +207,20 @@
                     icon: '📪',
                     fields: []
                 }, 
-                img_write: {
+                img_writer: {
                     role: 'dest',
                     name: 'Image Writer',
                     description: 'Writes images to disk',
                     icon: '🖼️',
+                    fields: [
+                        { name: 'output_path', label: 'Output Path', type: 'text', default: './output', required: true, placeholder: 'e.g., ./output' }
+                    ]
+                }, 
+                txt_writer: {
+                    role: 'dest',
+                    name: 'Text Writer',
+                    description: 'Writes text to disk',
+                    icon: '📝',
                     fields: [
                         { name: 'output_path', label: 'Output Path', type: 'text', default: './output', required: true, placeholder: 'e.g., ./output' }
                     ]
