@@ -262,19 +262,12 @@
 
             // --- Disable/Enable UI controls helpers ---
             /**
-             * Disable or enable only Start and Stop buttons
+             * Disable or enable all UI controls
              * @param {boolean} disabled
              */
-            function setStartStopDisabled(disabled) {
+            function setControlsDisabled(disabled) {
                 if (startBtn) startBtn.disabled = disabled;
                 if (stopBtn) stopBtn.disabled = disabled;
-            }
-
-            /**
-             * Disable or enable all controls except Start and Stop buttons
-             * @param {boolean} disabled
-             */
-            function setOtherControlsDisabled(disabled) {
                 if (addStreamBtn) addStreamBtn.disabled = disabled || currentStreamCount() >= MAX_STREAMS;
                 if (clearStreamsBtn) clearStreamsBtn.disabled = disabled;
                 if (testDirInput) testDirInput.disabled = disabled;
@@ -287,14 +280,6 @@
                 }
             }
 
-            /**
-             * Disable or enable all UI controls
-             * @param {boolean} disabled
-             */
-            function setControlsDisabled(disabled) {
-                setStartStopDisabled(disabled);
-                setOtherControlsDisabled(disabled);
-            }
             // Extend window type to allow setControlsDisabled
             /** @type {any} */ (window).setControlsDisabled = setControlsDisabled;
 
