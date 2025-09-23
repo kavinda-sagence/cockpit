@@ -274,6 +274,9 @@ class InfProcess:
                 if src_channel_type == 'rand_gen':
                     src_channel_configs['input_image_shape'] = input_image_shape
                     src_channel = inf_channels.RandGenChannel(stream_id, src_channel_configs)
+                elif src_channel_type == 'camera':
+                    src_channel_configs['input_image_shape'] = input_image_shape
+                    src_channel = inf_channels.CameraChannel(stream_id, src_channel_configs)
                 else:
                     raise ValueError(f"Unsupported source channel type: {src_channel_type}")
 
@@ -281,6 +284,8 @@ class InfProcess:
                 dest_channel_configs = dest_channel_data.get('configs', {})
                 if dest_channel_type == 'no_op':
                     dest_channel = inf_channels.NoOpChannel(stream_id, dest_channel_configs, src_channel)
+                elif dest_channel_type == 'img_write':
+                    dest_channel = inf_channels.ImageWriterChannel(stream_id, dest_channel_configs, src_channel)
                 else:
                     raise ValueError(f"Unsupported destination channel type: {dest_channel_type}")
 

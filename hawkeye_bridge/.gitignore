@@ -1,3 +1,6 @@
 *.txt
 
+/output/**
+!/output/README.md
+
 aix_endpoint.py

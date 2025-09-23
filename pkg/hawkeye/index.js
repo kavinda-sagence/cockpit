@@ -190,12 +190,31 @@
                         { name: 'number_of_frames', label: 'Number of Frames', type: 'number', min: 1, default: 100, required: true, placeholder: 'e.g., 100' }
                     ]
                 },
+                camera: {
+                    role: 'src',
+                    name: 'Camera',
+                    description: 'Captures video frames from a camera',
+                    icon: '📷',
+                    fields: [
+                        { name: 'number_of_frames', label: 'Number of Frames', type: 'number', min: 1, default: 100, required: true, placeholder: 'e.g., 100' }, 
+                        { name: 'address', label: 'Camera Address', type: 'text', default: '/dev/video0', required: true, placeholder: 'e.g., /dev/video0' }, 
+                    ]
+                },
                 no_op: {
                     role: 'dest',
                     name: 'No Operation',
                     description: 'Receives data without processing',
                     icon: '📪',
                     fields: []
+                }, 
+                img_write: {
+                    role: 'dest',
+                    name: 'Image Writer',
+                    description: 'Writes images to disk',
+                    icon: '🖼️',
+                    fields: [
+                        { name: 'output_path', label: 'Output Path', type: 'text', default: './output', required: true, placeholder: 'e.g., ./output' }
+                    ]
                 }
             };
 
@@ -243,6 +262,17 @@
             }
 
             // Hook notifications into UI message area (simple handling)
+            /**
+             * Notification data interface.
+             * @typedef {Object} NotificationData
+             * @property {string} [error]
+             * @property {string} [warning]
+             * [key: string]: any
+             */
+
+            /**
+             * @type {(data: NotificationData) => void}
+             */
             hawkeye.onNotification = (data) => {
                 if (!data) { setMessage("(notification: empty)"); return; }
                 if (data.error) setMessage(String(data.error), true);
