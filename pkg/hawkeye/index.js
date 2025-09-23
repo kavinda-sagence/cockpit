@@ -663,7 +663,7 @@
                 fillList(hostStdoutEl, logStore.host.stdout, false);
                 fillList(hostStderrEl, logStore.host.stderr, true);
 
-                // Streamers
+                // Streamers - THIS IS THE OPTIMIZED SECTION
                 const streamers = (infPro.streamers && typeof infPro.streamers === "object") ? infPro.streamers : {};
                 if (!hostPresent) {
                     // Clear streamers when inference process is gone
@@ -712,36 +712,46 @@
                     mergeArr("dest_channel_status_msgs", incoming.dest_channel_status_msgs);
                     mergeArr("dest_channel_error_msgs", incoming.dest_channel_error_msgs);
                 });
+                
+                // OPTIMIZED RENDERING: Only update existing cards, don't rebuild from scratch
                 if (streamersContainerEl) {
-                    streamersContainerEl.innerHTML = "";
                     const keys = Object.keys(logStore.streamers).sort((a,b)=>parseInt(a,10)-parseInt(b,10));
                     if (!keys.length) {
-                        // Let CSS handle empty state
+                        // Clear container if no streamers
+                        streamersContainerEl.innerHTML = "";
                         return;
-                    } else {
-                        keys.forEach(k => {
-                            const sObj = logStore.streamers[k] || {};
-                            const card = document.createElement("div");
+                    }
+                    
+                    // Update or create streamer cards efficiently
+                    keys.forEach(k => {
+                        const sObj = logStore.streamers[k] || {};
+                        let card = streamersContainerEl.querySelector(`[data-streamer-id="${k}"]`);
+                        
+                        const alive = sObj.alive === true;
+                        const framesTx = sObj.frames_transmitted ?? "-";
+                        const framesRx = sObj.frames_received ?? "-";
+                        const numFrames = sObj.num_frames ?? "-";
+                        
+                        // Calculate progress percentage
+                        const framesTxNum = typeof framesTx === 'number' ? framesTx : (framesTx !== "-" ? parseInt(String(framesTx), 10) : 0);
+                        const numFramesNum = typeof numFrames === 'number' ? numFrames : (numFrames !== "-" ? parseInt(String(numFrames), 10) : 0);
+                        const progress = numFramesNum > 0 && !isNaN(framesTxNum) && !isNaN(numFramesNum)
+                            ? Math.round((framesTxNum / numFramesNum) * 100) 
+                            : 0;
+                        
+                        if (!card) {
+                            // Create new card if it doesn't exist
+                            card = document.createElement("div");
                             card.className = "streamer-card";
-                            const alive = sObj.alive === true;
-                            const framesTx = sObj.frames_transmitted ?? "-";
-                            const framesRx = sObj.frames_received ?? "-";
-                            const numFrames = sObj.num_frames ?? "-";
-                            
-                            // Calculate progress percentage
-                            const framesTxNum = typeof framesTx === 'number' ? framesTx : (framesTx !== "-" ? parseInt(String(framesTx), 10) : 0);
-                            const numFramesNum = typeof numFrames === 'number' ? numFrames : (numFrames !== "-" ? parseInt(String(numFrames), 10) : 0);
-                            const progress = numFramesNum > 0 && !isNaN(framesTxNum) && !isNaN(numFramesNum)
-                                ? Math.round((framesTxNum / numFramesNum) * 100) 
-                                : 0;
+                            /** @type {HTMLElement} */(card).dataset.streamerId = k;
                             
                             card.innerHTML = `
                                 <div class="streamer-header">
                                     <div class="streamer-id">🔄 Streamer #${k}</div>
                                     <div class="badges">
-                                        <span class="badge alive-${alive}">${alive ? "🟢 ACTIVE" : "🔴 DONE"}</span>
-                                        <span class="badge">� ${framesTx}/${numFrames} (${progress}%)</span>
-                                        <span class="badge">📥 Received: ${framesRx}</span>
+                                        <span class="badge status-badge alive-${alive}">${alive ? "🟢 ACTIVE" : "🔴 DONE"}</span>
+                                        <span class="badge progress-badge">📤 ${framesTx}/${numFrames} (${progress}%)</span>
+                                        <span class="badge received-badge">📥 Received: ${framesRx}</span>
                                     </div>
                                 </div>
                                 
@@ -772,7 +782,7 @@
                                     <div class="channel-component-content collapsible-content" id="src-channel-${k}">
                                         <div class="channel-logs">
                                             <div class="msg-group">
-                                                <div class="msg-group-title">� Status</div>
+                                                <div class="msg-group-title">📝 Status</div>
                                                 <ul class="msg-list src-status"></ul>
                                             </div>
                                             <div class="msg-group">
@@ -802,16 +812,10 @@
                                     </div>
                                 </div>
                             `;
-                            streamersContainerEl.appendChild(card);
-                            // Fill lists
-                            fillList(card.querySelector(".streamer-status"), sObj.streamer_status_msgs, false);
-                            fillList(card.querySelector(".streamer-errors"), sObj.streamer_error_msgs, true);
-                            fillList(card.querySelector(".src-status"), sObj.src_channel_status_msgs, false);
-                            fillList(card.querySelector(".src-errors"), sObj.src_channel_error_msgs, true);
-                            fillList(card.querySelector(".dest-status"), sObj.dest_channel_status_msgs, false);
-                            fillList(card.querySelector(".dest-errors"), sObj.dest_channel_error_msgs, true);
                             
-                            // Add collapsible functionality
+                            streamersContainerEl.appendChild(card);
+                            
+                            // Add collapsible functionality to new card
                             card.querySelectorAll('.collapsible').forEach(header => {
                                 header.addEventListener('click', function(/** @type {Event} */ event) {
                                     const clickedHeader = /** @type {HTMLElement} */ (event.currentTarget);
@@ -826,22 +830,48 @@
                                     }
                                 });
                             });
-                        });
-                    }
+                        } else {
+                            // OPTIMIZATION: Update existing card badges only (no full redraw)
+                            const statusBadge = card.querySelector('.status-badge');
+                            const progressBadge = card.querySelector('.progress-badge');
+                            const receivedBadge = card.querySelector('.received-badge');
+                            
+                            if (statusBadge) {
+                                statusBadge.className = "badge status-badge alive-" + alive;
+                                statusBadge.textContent = alive ? "🟢 ACTIVE" : "🔴 DONE";
+                            }
+                            if (progressBadge) {
+                                progressBadge.textContent = "📤 " + framesTx + "/" + numFrames + " (" + progress + "%)";
+                            }
+                            if (receivedBadge) {
+                                receivedBadge.textContent = "📥 Received: " + framesRx;
+                            }
+                        }
+                        
+                        // Update message lists (these are efficient as they only append new items)
+                        fillList(card.querySelector(".streamer-status"), sObj.streamer_status_msgs, false);
+                        fillList(card.querySelector(".streamer-errors"), sObj.streamer_error_msgs, true);
+                        fillList(card.querySelector(".src-status"), sObj.src_channel_status_msgs, false);
+                        fillList(card.querySelector(".src-errors"), sObj.src_channel_error_msgs, true);
+                        fillList(card.querySelector(".dest-status"), sObj.dest_channel_status_msgs, false);
+                        fillList(card.querySelector(".dest-errors"), sObj.dest_channel_error_msgs, true);
+                    });
+                    
+                    // Remove cards for streamers that no longer exist
+                    const existingCards = streamersContainerEl.querySelectorAll('[data-streamer-id]');
+                    existingCards.forEach(card => {
+                        const streamerId = /** @type {HTMLElement} */(card).dataset.streamerId;
+                        if (streamerId && !keys.includes(streamerId)) {
+                            card.remove();
+                        }
+                    });
                 }
+                
+                // Restore main page scroll position
+                document.documentElement.scrollTop = mainScrollTop;
+                document.body.scrollTop = mainScrollTop;
             }
 
             hawkeye.onStatusUpdate = updateStatusUI;
-            // For quick manual UI test without backend, you can uncomment below:
-            // setTimeout(() => {
-            //     updateStatusUI({
-            //         inf_pro: {
-            //             host: { running: true, exit_code: null, stdout: ["Framework init"], stderr: [] },
-            //             streamers: {
-            //                 0: { alive: true, num_frames: 50, frames_transmitted: 10, frames_received: 5, streamer_status_msgs: ["Started"], streamer_error_msgs: [], src_channel_status_msgs: ["Frame 1 captured"], src_channel_error_msgs: [], dest_channel_status_msgs: ["Frame 1 received"], dest_channel_error_msgs: [] }
-            //             }
-            //         }
-            //     });
-            // }, 500);
         });
 })();
