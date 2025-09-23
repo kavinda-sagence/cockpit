@@ -1,3 +1,4 @@
+            // ...existing code...
 /* Clean, minimal implementation with dynamic streamer configuration */
 (function() {
         "use strict";
@@ -53,8 +54,8 @@
                 }
             }
 
-        /** @param {any} data */
-        handleRawMessage(data) {
+            /** @param {any} data */
+            handleRawMessage(data) {
                 const lines = String(data).trim().split('\n');
                 lines.forEach((line) => {
                     const trimmed = line.trim();
@@ -73,8 +74,8 @@
                 });
             }
 
-        /** @param {{type?:string,[key:string]:any}} message */
-        handleMessage(message) {
+            /** @param {{type?:string,[key:string]:any}} message */
+            handleMessage(message) {
                 if (!message || typeof message !== "object") {
                     console.error("Invalid message format:", message);
                     return;
@@ -99,36 +100,41 @@
                 }
             }
 
-        /** @param {any} data */
-        handleStatus(data) {
+            /** @param {any} data */
+            handleStatus(data) {
                 console.log("Status:", data);
                 if (this.onStatusUpdate) {
                     try { this.onStatusUpdate(data); } catch (e) { console.error("onStatusUpdate handler error", e); }
                 }
             }
 
-        /** @param {any} data */
-        handleNotification(data) {
+            /** @param {any} data */
+            handleNotification(data) {
                 if (!data || typeof data !== "object") {
                     console.log("Notification:", data);
                     if (this.onNotification) { try { this.onNotification(data); } catch (e) { console.error("onNotification handler error", e); } }
                     return;
                 }
+                
                 if (data.warning) console.warn("Bridge warning:", data.warning);
                 else if (data.error) console.error("Bridge error:", data.error);
                 else console.log("Notification:", data);
+                
                 if (this.onNotification) {
                     try { this.onNotification(data); } catch (e) { console.error("onNotification handler error", e); }
                 }
             }
 
-        /** @param {any} data */
-        handleAck(data) {
+            /** @param {any} data */
+            handleAck(data) {
                 console.log("Acknowledgment:", data);
+                // Re-enable controls on ack
+                // @ts-ignore
+                if (typeof window !== 'undefined' && typeof window['setControlsDisabled'] === 'function') window['setControlsDisabled'](false);
             }
 
-        /** @param {any} options */
-        handleChannelClose(options) {
+            /** @param {any} options */
+            handleChannelClose(options) {
                 this.channel = null;
                 if (options && options.problem) {
                     console.error("Channel closed with problem:", options.problem);
@@ -147,8 +153,8 @@
                 setTimeout(() => this.connect(), delay);
             }
 
-        /** @param {string} type @param {any} data */
-        sendCommand(type, data) {
+            /** @param {string} type @param {any} data */
+            sendCommand(type, data) {
                 if (!this.channel) {
                     console.error("Channel not available");
                     return false;
@@ -237,6 +243,7 @@
                 }
             };
 
+
             const MAX_STREAMS = 5;
             /** @type {HTMLElement|null} */ const streamsContainer = document.getElementById("streams");
             /** @type {HTMLButtonElement|null} */ const addStreamBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById("add-stream"));
@@ -252,6 +259,44 @@
             /** @type {HTMLElement|null} */ const hostStderrEl = document.getElementById("host-stderr");
             /** @type {HTMLElement|null} */ const streamersContainerEl = document.getElementById("streamers-container");
             /** @type {HTMLElement|null} */ const hwTempsEl = document.getElementById("hw-temps");
+
+            // --- Disable/Enable UI controls helpers ---
+            /**
+             * Disable or enable only Start and Stop buttons
+             * @param {boolean} disabled
+             */
+            function setStartStopDisabled(disabled) {
+                if (startBtn) startBtn.disabled = disabled;
+                if (stopBtn) stopBtn.disabled = disabled;
+            }
+
+            /**
+             * Disable or enable all controls except Start and Stop buttons
+             * @param {boolean} disabled
+             */
+            function setOtherControlsDisabled(disabled) {
+                if (addStreamBtn) addStreamBtn.disabled = disabled || currentStreamCount() >= MAX_STREAMS;
+                if (clearStreamsBtn) clearStreamsBtn.disabled = disabled;
+                if (testDirInput) testDirInput.disabled = disabled;
+                if (streamsContainer) {
+                streamsContainer.querySelectorAll('input,select,button.stream-remove').forEach(el => {
+                    if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLButtonElement) {
+                    el.disabled = disabled;
+                    }
+                });
+                }
+            }
+
+            /**
+             * Disable or enable all UI controls
+             * @param {boolean} disabled
+             */
+            function setControlsDisabled(disabled) {
+                setStartStopDisabled(disabled);
+                setOtherControlsDisabled(disabled);
+            }
+            // Extend window type to allow setControlsDisabled
+            /** @type {any} */ (window).setControlsDisabled = setControlsDisabled;
 
             // Accumulated logs persist until a new Start
             const logStore = {
@@ -543,14 +588,19 @@
 
             if (startBtn) startBtn.addEventListener("click", () => {
                 setMessage("");
+                /** @type {any} */ (window).setControlsDisabled(true);
                 resetLogs(); // new inference run starting, clear previous logs
                 const cfg = gatherConfig();
-                if (!cfg) return;
+                if (!cfg) {
+                    /** @type {any} */ (window).setControlsDisabled(false);
+                    return;
+                }
                 hawkeye.sendCommand("command", { component: "inf_process", command: "start", configs: cfg });
                 setMessage("Start command sent", false);
             });
             if (stopBtn) stopBtn.addEventListener("click", () => {
                 setMessage("");
+                /** @type {any} */ (window).setControlsDisabled(true);
                 hawkeye.sendCommand("command", { component: "inf_process", command: "stop" });
                 setMessage("Stop command sent", false);
             });
