@@ -115,6 +115,48 @@ class CameraChannel(SrcChannel):
         return stat, [qt_image]
 
 
+class VideoReaderChannel(SrcChannel):
+    def __init__(self, stream_id: int, configs: dict[str, Any]) -> None:
+        super().__init__(stream_id, configs)
+        
+        self.q_val: float = 0.5
+        self.input_image_shape: tuple[tuple[int, int, int], ...] = configs['input_image_shape']
+        self.video_path: str = configs['video_path']
+        
+        if not os.path.exists(self.video_path):
+            raise FileNotFoundError(f"Video file not found: {self.video_path}")
+        
+        self.cap = cv2.VideoCapture(self.video_path)
+        if not self.cap.isOpened():
+            raise RuntimeError(f"Failed to open video file: {self.video_path}")
+        
+        self.put_status_message(f"Video file opened: {self.video_path}")
+
+    def __del__(self) -> None:
+        if hasattr(self, 'cap') and self.cap.isOpened():
+            self.cap.release()
+        
+        self.put_status_message("Video file released")
+
+    def capture(self) -> tuple[bool, list[np.ndarray[np.int8, Any]]]:
+        
+        input_lst: list[np.ndarray[np.int8, Any]] = list()
+
+        if self.frames_transmitted >= self.number_of_frames:
+            return False, input_lst
+
+        stat, image = self.cap.read()
+        self.image_queue.put(image)
+
+        resized_image = cv2.resize(image, (self.input_image_shape[0][1], self.input_image_shape[0][0]))
+        qt_image = cv2.convertScaleAbs(resized_image, alpha=self.q_val).astype(np.int8)
+
+        self.frames_transmitted += 1
+        self.put_status_message(f"Frame {self.frames_transmitted} captured")
+
+        return stat, [qt_image]
+
+
 class NoOpChannel(DestChannel):
     def __init__(self, stream_id: int, configs: dict[str, Any], src_channel: SrcChannel) -> None:
         super().__init__(stream_id, configs, src_channel)

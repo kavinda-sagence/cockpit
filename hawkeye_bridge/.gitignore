@@ -2,5 +2,7 @@
 
 /output/**
 !/output/README.md
+/input/**
+!/input/README.md
 
 aix_endpoint.py

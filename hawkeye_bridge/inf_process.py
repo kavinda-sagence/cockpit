@@ -277,6 +277,9 @@ class InfProcess:
                 elif src_channel_type == 'camera':
                     src_channel_configs['input_image_shape'] = input_image_shape
                     src_channel = inf_channels.CameraChannel(stream_id, src_channel_configs)
+                elif src_channel_type == 'video_file':
+                    src_channel_configs['input_image_shape'] = input_image_shape
+                    src_channel = inf_channels.VideoReaderChannel(stream_id, src_channel_configs)
                 else:
                     raise ValueError(f"Unsupported source channel type: {src_channel_type}")
 

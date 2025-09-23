@@ -199,6 +199,16 @@
                         { name: 'number_of_frames', label: 'Number of Frames', type: 'number', min: 1, default: 100, required: true, placeholder: 'e.g., 100' }, 
                         { name: 'address', label: 'Camera Address', type: 'text', default: '/dev/video0', required: true, placeholder: 'e.g., /dev/video0' }, 
                     ]
+                }, 
+                video_file: {
+                    role: 'src',
+                    name: 'Video File',
+                    description: 'Reads frames from a video file',
+                    icon: '🎥',
+                    fields: [
+                        { name: 'number_of_frames', label: 'Number of Frames', type: 'number', min: 1, default: 100, required: true, placeholder: 'e.g., 100' }, 
+                        { name: 'video_path', label: 'Video Path', type: 'text', default: './input/video.webm', required: true, placeholder: 'e.g., ./input/video.webm' }, 
+                    ]
                 },
                 no_op: {
                     role: 'dest',
