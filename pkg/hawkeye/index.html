@@ -1,150 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <title>Hawkeye - Sagence AI Stream Dashboard</title>
+    <title>Hawkeye</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Sagence AI Hawkeye - Advanced stream configuration and monitoring dashboard">
-    <meta name="keywords" content="Sagence AI, Hawkeye, stream monitoring, data processing, AI dashboard">
-    <meta name="author" content="Sagence AI">
     <link href="index.css" type="text/css" rel="stylesheet">
     <script src="../base1/cockpit.js"></script>
     <script src="index.js"></script>
 </head>
 <body>
-    <div class="container">
-        <header class="app-header">
-            <div class="brand-section">
-                <div class="logo-container">
-                    <div class="logo-placeholder">
-                        <span class="logo-icon">🦅</span>
-                    </div>
-                    <div class="brand-text">
-                        <h1 class="app-title">Hawkeye</h1>
-                        <div class="company-brand">
-                            <span class="company-name">Sagence AI</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="version-info">
-                    <span class="version-badge">v1.0</span>
-                </div>
-            </div>
-        </header>
-
-        <main>
-            <!-- Status Dashboard -->
-            <section id="status-area" aria-label="System Status Dashboard">
-                <!-- Host Process -->
-                <div id="host-status" class="status-block card main-component">
-                    <div class="status-block-header host">
-                        <span class="component-icon">🖥️</span>
-                        Host Process
-                    </div>
-                    <div class="status-block-content">
-                        <!-- Host Configuration -->
-                        <div class="component-config-section">
-                            <div class="config-title">Host Configuration</div>
-                            
-                            <!-- Framework Directory -->
-                            <div class="config-field-group">
-                                <label for="test-dir" class="form-label">Framework Directory Path</label>
-                                <input 
-                                    type="text" 
-                                    id="test-dir" 
-                                    class="form-input" 
-                                    placeholder="/path/to/framework_dir/" 
-                                    aria-describedby="test-dir-help"
-                                />
-                                <small id="test-dir-help" class="form-help">Specify the path to your framework directory</small>
-                            </div>
-
-                            <!-- Stream Configuration -->
-                            <div class="stream-config-section">
-                                <div class="stream-config-title">Streamer Configuration</div>
-                                
-                                <!-- Stream Controls -->
-                                <div class="stream-controls">
-                                    <button id="add-stream" class="btn btn-secondary" aria-label="Add new streamer">
-                                        <span>➕</span> Add Streamer
-                                    </button>
-                                    <button id="clear-streams" class="btn btn-secondary" aria-label="Clear all streamers">
-                                        <span>🗑️</span> Clear All
-                                    </button>
-                                </div>
-
-                                <!-- Streams Container -->
-                                <div id="streams" role="region" aria-label="Stream configurations"></div>
-
-                                <!-- Action Controls -->
-                                <div class="action-controls">
-                                    <button id="start" class="btn btn-success btn-lg" aria-label="Start streaming">
-                                        <span>▶️</span> START
-                                    </button>
-                                    <button id="stop" class="btn btn-danger btn-lg" aria-label="Stop streaming">
-                                        <span>⏹️</span> STOP
-                                    </button>
-                                </div>
-
-                                <!-- Messages -->
-                                <div id="messages" class="message" role="alert" aria-live="polite"></div>
-                            </div>
-                        </div>
-
-                        <!-- Host Status Info -->
-                        <div class="component-status-section">
-                            <div class="kv">
-                                <span class="k">Status:</span> 
-                                <span class="v" id="host-running">
-                                    <span class="status-indicator pending">Pending</span>
-                                </span>
-                            </div>
-                            <div class="kv">
-                                <span class="k">Exit Code:</span> 
-                                <span class="v" id="host-exit-code">-</span>
-                            </div>
-                        </div>
-
-                        <!-- Host Logs -->
-                        <div class="component-logs">
-                            <div class="log-title">Host Logs</div>
-                            <div class="messages-pair">
-                                <div class="msg-group">
-                                    <div class="msg-group-title stdout">STDOUT</div>
-                                    <ul id="host-stdout" class="msg-list" role="log"></ul>
-                                </div>
-                                <div class="msg-group">
-                                    <div class="msg-group-title stderr">STDERR</div>
-                                    <ul id="host-stderr" class="msg-list" role="log"></ul>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Hardware Status (under Host) -->
-                        <div class="sub-component">
-                            <div class="sub-component-header">
-                                <span class="sub-component-icon">🌡️</span>
-                                Hardware & Temperatures
-                            </div>
-                            <div class="sub-component-content">
-                                <ul id="hw-temps" class="msg-list temps-list" role="list"></ul>
-                            </div>
-                        </div>
-
-                        <!-- Streamers Section (under Host) -->
-                        <div class="sub-component">
-                            <div class="sub-component-header">
-                                <span class="sub-component-icon">🔄</span>
-                                Streamers
-                            </div>
-                            <div class="sub-component-content">
-                                <div id="streamers-container"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </main>
+    <div>
+        <button id="start">START</button>
+        <button id="stop">STOP</button>
     </div>
 </body>
 </html>
