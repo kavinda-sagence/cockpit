@@ -16,7 +16,7 @@
         connect() {
             try {
 
-                const hawkeyeBridgePath = "/home/kavinda/Desktop/MySpace/code/cockpit/hawkeye_bridge/";
+                const hawkeyeBridgePath = "/home/analog/kavinda/cockpit/hawkeye_bridge/";
                 const hawkeyeBridgeScript = "hawkeye-bridge.sh";
 
                 this.channel = cockpit.channel({
@@ -138,9 +138,9 @@
             }
 
             // Only attempt to reconnect if we're not intentionally disconnecting
-            if (!this.isDisconnecting) {
-                this.scheduleReconnect();
-            }
+            // if (!this.isDisconnecting) {
+            //     this.scheduleReconnect();
+            // }
         }
 
         scheduleReconnect() {
@@ -203,7 +203,7 @@
                         command: 'start', 
                         configs: 
                         {
-                            test_dir_path: '/home/kavinda/Desktop/MySpace/code/sg_sw/sw_ss/Linux86/RT/runtime_test_app/test_data/no_op/', 
+                            test_dir_path: '/home/analog/kavinda/sg_sw/sw_be/out_sw_be/aix/bin/deb64-x86_64/release/desgen/hwtests/ASM_test/it-bypass-only-sd/', 
                             streams: 
                             [
                                 {
